@@ -314,7 +314,7 @@ local function IZCNEQ_script() -- Bhop.LocalScript
 		airAccelerate = 50000
 		airMaxSpeed = 10
 		groundAccelerate = 250
-		groundMaxVelocity = 80
+		groundMaxVelocity = 25
 		friction = 10
 		playerTorsoToGround = 3
 		movementStickDistance = 0.5
