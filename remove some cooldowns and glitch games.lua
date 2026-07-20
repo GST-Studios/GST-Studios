@@ -1,6 +1,6 @@
 local RunService = game:GetService("RunService")
 
-local TIME_SCALE = 100 -- how fast time moves (10 = 10x faster)
+local TIME_SCALE = 100
 
 local startTick = tick()
 local startTime = time()
@@ -9,6 +9,12 @@ local startServerTime = workspace:GetServerTimeNow()
 
 local function accelerate(original, start)
     return start + (original - start) * TIME_SCALE
+end
+
+local function accelerateDateTime(dt)
+    return DateTime.fromUnixTimestamp(
+        accelerate(dt.UnixTimestamp, startTime)
+    )
 end
 
 oldWait = hookfunction(wait, function(seconds)
@@ -55,6 +61,8 @@ oldRenderStepped = hookfunction(RunService.RenderStepped.Wait, function(self, ..
     return oldRenderStepped(self, ...)
 end)
 
+-- Numeric time sources
+
 oldTick = hookfunction(tick, function()
     return accelerate(oldTick(), startTick)
 end)
@@ -63,22 +71,12 @@ oldTime = hookfunction(time, function()
     return accelerate(oldTime(), startTime)
 end)
 
-oldGetTime = hookfunction(workspace.GetServerTimeNow, function(self, ...)
-    return accelerate(oldGetTime(self, ...), startServerTime)
-end)
-
-oldTimeNow = hookfunction(DateTime.now, function()
-    return DateTime.fromUnixTimestamp(
-        accelerate(oldTick(), startTick)
-    )
-end)
-
 oldClock = hookfunction(os.clock, function()
     return accelerate(oldClock(), startClock)
 end)
 
-oldDate = hookfunction(os.date, function(...)
-    return oldDate(...)
+oldGetTime = hookfunction(workspace.GetServerTimeNow, function(self, ...)
+    return accelerate(oldGetTime(self, ...), startServerTime)
 end)
 
 oldOsTime = hookfunction(os.time, function(...)
@@ -86,35 +84,35 @@ oldOsTime = hookfunction(os.time, function(...)
 end)
 
 oldOsDifftime = hookfunction(os.difftime, function(t2, t1)
-    return oldOsDifftime(t2, t1)
+    return accelerate(oldOsDifftime(t2, t1), 0)
 end)
 
-oldFromUnixTimestamp = hookfunction(DateTime.fromUnixTimestamp, function(...)
-    return oldFromUnixTimestamp(...)
+-- DateTime
+
+oldTimeNow = hookfunction(DateTime.now, function()
+    return DateTime.fromUnixTimestamp(
+        accelerate(os.time(), startTime)
+    )
 end)
 
-oldFromUnixTimestampMillis = hookfunction(DateTime.fromUnixTimestampMillis, function(...)
-    return oldFromUnixTimestampMillis(...)
+oldFromUnixTimestamp = hookfunction(DateTime.fromUnixTimestamp, function(timestamp)
+    return oldFromUnixTimestamp(
+        accelerate(timestamp, startTime)
+    )
+end)
+
+oldFromUnixTimestampMillis = hookfunction(DateTime.fromUnixTimestampMillis, function(ms)
+    return oldFromUnixTimestampMillis(
+        accelerate(ms / 1000, startTime) * 1000
+    )
 end)
 
 oldFromLocalTime = hookfunction(DateTime.fromLocalTime, function(...)
-    return oldFromLocalTime(...)
+    return accelerateDateTime(oldFromLocalTime(...))
 end)
 
 oldFromUniversalTime = hookfunction(DateTime.fromUniversalTime, function(...)
-    return oldFromUniversalTime(...)
-end)
-
-oldTaskSpawn = hookfunction(task.spawn, function(f, ...)
-    return oldTaskSpawn(f, ...)
-end)
-
-oldTaskDefer = hookfunction(task.defer, function(f, ...)
-    return oldTaskDefer(f, ...)
-end)
-
-oldCoroutineYield = hookfunction(coroutine.yield, function(...)
-    return oldCoroutineYield(...)
+    return accelerateDateTime(oldFromUniversalTime(...))
 end)
 
 print("Loaded")
