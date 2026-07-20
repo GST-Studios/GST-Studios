@@ -1,4 +1,4 @@
--- made it adapt to size changes
+-- made it adapt to size changes and walkspeed and jumppower
 -- Monstrum's Gui to Lua\n-- Version: 3.2
 
 -- Instances:
@@ -314,7 +314,6 @@ local function IZCNEQ_script() -- Bhop.LocalScript
 		airAccelerate = 50000
 		airMaxSpeed = 10
 		groundAccelerate = 250
-		groundMaxVelocity = character.Humanoid.WalkSpeed
 		friction = 10
 		task.spawn(function()
 			while character and character.Parent do
@@ -325,12 +324,13 @@ local function IZCNEQ_script() -- Bhop.LocalScript
 					playerTorsoToGround = (root.Size.Y / 2) + humanoid.HipHeight
 					movementStickDistance = 0.5
 					rayYLength = playerTorsoToGround + movementStickDistance
+					groundMaxVelocity = character.Humanoid.WalkSpeed
+					jumpVelocity = character.Humanoid.JumpPower
 				end
 
 				task.wait()
 			end
 		end)
-		jumpVelocity = character.Humanoid.JumpPower
 		movementPositionForce = 400000
 		movementVelocityForce = 300000
 		maxMovementPitch = 0.6
@@ -680,3 +680,4 @@ local function IZCNEQ_script() -- Bhop.LocalScript
 	main()
 end
 coroutine.wrap(IZCNEQ_script)()
+
