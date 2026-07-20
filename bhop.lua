@@ -1,4 +1,4 @@
--- might as well give this one
+-- made it adapt to size changes
 -- Monstrum's Gui to Lua\n-- Version: 3.2
 
 -- Instances:
@@ -314,15 +314,26 @@ local function IZCNEQ_script() -- Bhop.LocalScript
 		airAccelerate = 50000
 		airMaxSpeed = 10
 		groundAccelerate = 250
-		groundMaxVelocity = 25
+		groundMaxVelocity = character.Humanoid.WalkSpeed
 		friction = 10
-		playerTorsoToGround = 3
-		movementStickDistance = 0.5
-		jumpVelocity = 50
+		task.spawn(function()
+			while character and character.Parent do
+				local humanoid = character:FindFirstChild("Humanoid")
+				local root = character:FindFirstChild("HumanoidRootPart")
+
+				if humanoid and root then
+					playerTorsoToGround = (root.Size.Y / 2) + humanoid.HipHeight
+					movementStickDistance = 0.5
+					rayYLength = playerTorsoToGround + movementStickDistance
+				end
+
+				task.wait()
+			end
+		end)
+		jumpVelocity = character.Humanoid.JumpPower
 		movementPositionForce = 400000
 		movementVelocityForce = 300000
 		maxMovementPitch = 0.6
-		rayYLength = playerTorsoToGround + movementStickDistance
 		movementPositionD = 125
 		movementPositionP = 14000
 		movementVelocityP = 1500
