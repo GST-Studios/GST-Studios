@@ -1,0 +1,1540 @@
+--[[
+╔══════════════════════════════════════════════════════╗
+║              DrawingUI  —  v3.1  (optimised)         ║
+║  A beautiful UI library built on Drawing.new()       ║
+╠══════════════════════════════════════════════════════╣
+║  USAGE                                               ║
+║                                                      ║
+║  local UI = loadstring(...)()                        ║
+║                                                      ║
+║  -- Create a window                                  ║
+║  local win = UI:Window("My Script",                  ║
+║      Vector2.new(300, 200))                          ║
+║                                                      ║
+║  -- Add tabs                                         ║
+║  local tab = win:Tab("Main")                         ║
+║                                                      ║
+║  -- Components                                       ║
+║  tab:Label("Hello World")                            ║
+║  tab:Button("Click Me", cb)                          ║
+║  tab:Toggle("Speed", false, cb)                      ║
+║  tab:Slider("Speed", 16, 0, 200, cb)                 ║
+║  tab:Dropdown("Mode", {"A","B"}, cb)                 ║
+║  tab:Textbox("Name", "default", cb)                  ║
+║  tab:Separator("section title")                      ║
+║  tab:Keybind("Macro", Enum.KeyCode.F, cb)            ║
+║                                                      ║
+║  -- Global controls                                  ║
+║  win:SetTransparency(0.9)                            ║
+║  win:SetVisible(false)                               ║
+║  win:SetPosition(Vector2.new(100,100))               ║
+║  win:SetSize(400, 350)                               ║
+║  win:Keybind("Toggle", Enum.KeyCode.RightShift, cb)  ║
+║  win:Destroy()                                       ║
+╚══════════════════════════════════════════════════════╝
+]]
+
+-- ── Localise hot globals (opt #1) ────────────────────
+local UIS     = cloneref(game:GetService("UserInputService"))
+local RS      = cloneref(game:GetService("RunService"))
+local Players = cloneref(game:GetService("Players"))
+
+-- Cache constructors used in every hot path (opt #1)
+local v2      = Vector2.new   -- replaces every Vector2.new(…) call
+local c3      = Color3.new
+local c3rgb   = Color3.fromRGB
+local mfloor  = math.floor
+local mmax    = math.max
+local mmin    = math.min
+local tinsert = table.insert
+local fmt     = string.format
+
+-- ── Cursor helpers ───────────────────────────────────
+local _mouse        = Players.LocalPlayer:GetMouse()
+local _savedIcon    = ""
+local _cursorActive = false
+
+-- Wrap with newcclosure so they appear as C functions (opt #2: faster dispatch,
+-- bypasses islclosure checks that some anti-cheats run on callback tables)
+local _showCursor = newcclosure(function()
+    if _cursorActive then return end
+    _cursorActive        = true
+    _savedIcon           = _mouse.Icon
+    _mouse.Icon          = "rbxasset://SystemCursors/Arrow"
+    UIS.MouseIconEnabled = true
+end)
+
+local _hideCursor = newcclosure(function()
+    if not _cursorActive then return end
+    _cursorActive = false
+    _mouse.Icon   = _savedIcon
+end)
+
+-- ── Public Drawing helpers ───────────────────────────
+local _black = c3(0,0,0)   -- shared constant — used by mkTxt, newText, avoids repeated Color3.new allocs
+
+local function newBox()  return Drawing.new("Square") end
+local function newLine() return Drawing.new("Line")   end
+local function newText()
+    local t = Drawing.new("Text")
+    t.Size         = 13
+    t.Outline      = true
+    t.OutlineColor = _black
+    t.Center       = true
+    return t
+end
+local newRect = newBox   -- identical implementation; share the same function
+
+-- ── Theme ────────────────────────────────────────────
+local T = {
+    Bg       = c3rgb(12,  12,  20),
+    Surface  = c3rgb(20,  20,  33),
+    Surface2 = c3rgb(28,  28,  44),
+    Border   = c3rgb(55,  55,  85),
+    Accent   = c3rgb(110,  90, 255),
+    AccentDi = c3rgb( 70,  55, 180),
+    AccentGl = c3rgb(140, 120, 255),
+    Text     = c3rgb(230, 230, 245),
+    TextDim  = c3rgb(155, 155, 180),
+    Success  = c3rgb( 72, 210, 130),
+    Danger   = c3rgb(220,  75,  75),
+    Warning  = c3rgb(240, 180,  50),
+    Scroll   = c3rgb( 55,  55,  85),
+    Shadow   = c3rgb(  0,   0,   0),
+}
+-- Make theme read-only so accidental writes error loudly (opt #3: getrawmetatable)
+do
+    local mt = getrawmetatable(T)
+    if mt then
+        setreadonly(T, true)
+    end
+end
+
+-- ── Helpers ──────────────────────────────────────────
+local function clamp(v,a,b) return mmax(a, mmin(b,v)) end
+
+-- opt #4: mpos() caches result; callers in the same event already pass the
+-- position where possible, so we only call GetMouseLocation once per event.
+local function mpos() return UIS:GetMouseLocation() end
+
+local function over(px,py,sw,sh)
+    local m = mpos()
+    return m.X>=px and m.X<=px+sw and m.Y>=py and m.Y<=py+sh
+end
+
+-- ── Drawing primitives ───────────────────────────────
+-- creation opt #1: direct property assignment — eliminates the temp table
+-- alloc AND the pairs() iterator closure that newD() used on every call.
+-- Each Drawing.new() now sets properties with plain field writes (no GC).
+
+local function mkRect(x,y,w,h,col,alpha,filled,thick)
+    local o = Drawing.new("Square")
+    o.Position    = v2(x,y)
+    o.Size        = v2(w,h)
+    o.Color       = col
+    o.Transparency= alpha or 1
+    o.Filled      = filled~=false
+    o.Thickness   = thick or 1
+    o.Visible     = true
+    return o
+end
+
+local function mkTxt(str,x,y,sz,col,alpha,center)
+    local o = Drawing.new("Text")
+    o.Text         = str
+    o.Position     = v2(x,y)
+    o.Size         = sz or 13
+    o.Color        = col or T.Text
+    o.Transparency = alpha or 1
+    o.Center       = center or false
+    o.Outline      = true
+    o.OutlineColor = _black
+    o.Visible      = true
+    return o
+end
+
+local function mkLine(x1,y1,x2,y2,col,thick,alpha)
+    local o = Drawing.new("Line")
+    o.From         = v2(x1,y1)
+    o.To           = v2(x2,y2)
+    o.Color        = col or T.Border
+    o.Thickness    = thick or 1
+    o.Transparency = alpha or 1
+    o.Visible      = true
+    return o
+end
+
+local function mkCirc(x,y,r,col,alpha,filled,thick)
+    local o = Drawing.new("Circle")
+    o.Position    = v2(x,y)
+    o.Radius      = r
+    o.Color       = col
+    o.Transparency= alpha or 1
+    o.Filled      = filled~=false
+    o.Thickness   = thick or 1
+    o.Visible     = true
+    return o
+end
+
+-- ── Rounded-rect group ───────────────────────────────
+-- creation opt #2: all four methods (vis/col/move/destroy) live on ONE shared
+-- metatable _RR_mt instead of being re-created as closures per mkRR() call.
+-- Before this, every mkRR() allocated 4 fresh function objects. Now it's zero.
+local CR = 5
+
+local _RR_mt = {}
+_RR_mt.__index = _RR_mt
+
+function _RR_mt:vis(v)
+    local s = self._subs
+    for i=1,#s do s[i].Visible=v end
+end
+
+function _RR_mt:col(c,a)
+    self._col=c; if a then self._a=a end
+    local al = self._a
+    local bg,tl,tr,bl,br = self.bg,self.tl,self.tr,self.bl,self.br
+    bg.Color=c; bg.Transparency=al
+    tl.Color=c; tl.Transparency=al
+    tr.Color=c; tr.Transparency=al
+    bl.Color=c; bl.Transparency=al
+    br.Color=c; br.Transparency=al
+end
+
+function _RR_mt:move(dx,dy)
+    if dx==0 and dy==0 then return end
+    self._x=self._x+dx; self._y=self._y+dy
+    local off = v2(dx,dy)   -- single alloc reused across all sub-objects
+    self.bg.Position = self.bg.Position + off
+    self.tl.Position = self.tl.Position + off
+    self.tr.Position = self.tr.Position + off
+    self.bl.Position = self.bl.Position + off
+    self.br.Position = self.br.Position + off
+    if self.et then
+        self.et.From=self.et.From+off; self.et.To=self.et.To+off
+        self.eb.From=self.eb.From+off; self.eb.To=self.eb.To+off
+        self.el.From=self.el.From+off; self.el.To=self.el.To+off
+        self.er.From=self.er.From+off; self.er.To=self.er.To+off
+    end
+end
+
+function _RR_mt:destroy()
+    local s = self._subs
+    for i=1,#s do s[i]:Remove() end
+end
+
+local function mkRR(x,y,w,h,col,alpha,bcol,balpha)
+    -- creation opt #4 (hoisting): pre-compute corner coordinates once here
+    -- instead of repeating x+CR, x+w-CR, y+CR, y+h-CR in each mkCirc call
+    local xCR  = x+CR;  local xwCR = x+w-CR
+    local yCR  = y+CR;  local yhCR = y+h-CR
+    local al   = alpha or 1
+
+    local g = setmetatable({
+        _x=x, _y=y, _w=w, _h=h, _col=col, _a=al,
+        _subs = {}
+    }, _RR_mt)
+
+    local bg = mkRect(x,y,w,h,col,al)
+    local tl = mkCirc(xCR,  yCR,  CR, col,al,true)
+    local tr = mkCirc(xwCR, yCR,  CR, col,al,true)
+    local bl = mkCirc(xCR,  yhCR, CR, col,al,true)
+    local br = mkCirc(xwCR, yhCR, CR, col,al,true)
+    g.bg=bg; g.tl=tl; g.tr=tr; g.bl=bl; g.br=br
+    local s = g._subs
+    s[1]=bg; s[2]=tl; s[3]=tr; s[4]=bl; s[5]=br
+
+    if bcol then
+        local ba = balpha or 1
+        local et = mkLine(xCR,y,  xwCR,y,   bcol,1,ba)
+        local eb = mkLine(xCR,y+h,xwCR,y+h, bcol,1,ba)
+        local el = mkLine(x,yCR,  x,   yhCR, bcol,1,ba)
+        local er = mkLine(x+w,yCR,x+w, yhCR, bcol,1,ba)
+        g.et=et; g.eb=eb; g.el=el; g.er=er
+        s[6]=et; s[7]=eb; s[8]=el; s[9]=er
+    end
+    return g
+end
+
+-- ══════════════════════════════════════════════════════
+--  Window
+-- ══════════════════════════════════════════════════════
+local Library = {}
+Library.__index = Library
+
+local Win = {}
+Win.__index = Win
+
+function Library:Window(title, startPos)
+    local w = setmetatable({}, Win)
+    w._x    = startPos and startPos.X or 250
+    w._y    = startPos and startPos.Y or 180
+    w._W    = 350
+    w._TH   = 34
+    w._TAB  = 28
+    w._CH   = 300
+    w._IH   = 30
+    w._PAD  = 5
+    w._vis  = true
+    w._min  = false
+    w._drag = false
+    w._dox  = 0; w._doy = 0
+    w._resizing = false
+    w._rdox = 0; w._rdoy = 0
+    w._tabs   = {}
+    w._active = nil
+    w._conns  = {}
+    w._wkbs   = {}
+    w._objs   = {}
+    -- opt #7: dirty flag for _updateScroll — skips RenderStepped work when
+    -- nothing has changed (no scroll, no resize, thumb already correct)
+    w._scrollDirty = true
+    w._lastThumbY  = -1
+    w._lastThumbH  = -1
+
+    w:_build(title)
+    w:_connect()
+    _showCursor()
+    return w
+end
+
+function Win:_o(obj)
+    tinsert(self._objs, obj)
+    return obj
+end
+
+function Win:_build(title)
+    local x,y,W,TH,TAB,CH = self._x,self._y,self._W,self._TH,self._TAB,self._CH
+    -- creation opt #4: hoist every repeated sub-expression so each sum is
+    -- computed once and reused — was up to 6 additions recomputed per call.
+    local yTH      = y+TH           -- used 4×
+    local THTABCH  = TH+TAB+CH      -- used 3×
+    local THTAB    = TH+TAB         -- used 3×
+    local yTHTAB   = y+THTAB        -- used 2×
+    local yTHTAB3  = yTHTAB+3       -- used 2×
+    local xW7      = x+W-7          -- used 2×
+
+    local _sg = Instance.new("ScreenGui")
+    _sg.Name           = "DrawingUIModal"
+    _sg.ResetOnSpawn   = false
+    _sg.IgnoreGuiInset = true
+    _sg.Parent         = gethui()
+    local _mf = Instance.new("TextButton")
+    _mf.Size                   = UDim2.new(0,0,0,0)
+    _mf.Position               = UDim2.new(0,0,0,0)
+    _mf.BackgroundTransparency = 0
+    _mf.Text                   = ""
+    _mf.AutoButtonColor        = false
+    _mf.Modal                  = true
+    _mf.Parent                 = _sg
+    self._modalGui = _sg
+
+    self._shadow   = mkRR(x+4,y+5,  W, THTABCH, T.Shadow, 0.28)
+    self._body     = mkRR(x,y,       W, THTABCH, T.Bg, 0.97, T.Border, 0.6)
+    self._titleBg  = mkRR(x,y,       W, TH,      T.Surface, 1)
+    self._stripe   = self:_o(mkRect(x,    yTH-2,   W,  2,    T.Accent,  1))
+    self._dot      = self:_o(mkCirc(x+14, y+TH/2,  4,  T.Accent, 1, true))
+    self._ttxt     = self:_o(mkTxt(title, x+26, y+9, 15, T.Text))
+    self._closeTxt = self:_o(mkTxt("×",  x+W-17, y+7, 14, T.Danger,  1, true))
+    self._minTxt   = self:_o(mkTxt("─",  x+W-33, y+10,12, T.TextDim, 1, true))
+    self._tabBg    = self:_o(mkRect(x,    yTH,     W,  TAB, T.Surface2,1))
+    self._contBg   = self:_o(mkRect(x,    yTHTAB,  W,  CH,  T.Bg,     1))
+    self._sTrack   = self:_o(mkRect(xW7,  yTHTAB3, 4,  CH-6,T.Scroll, 0.2))
+    self._sThumb   = mkRR(xW7, yTHTAB3, 4, 40, T.Accent, 0.8)
+    local rx = x+W-12;  local ry = y+THTABCH-12
+    self._rgrip    = self:_o(mkRect(rx,    ry,    12, 12, T.Border,  0.7))
+    self._rgripTxt = self:_o(mkTxt("◢",   rx+6,  ry+1, 12, T.TextDim,0.8,true))
+end
+
+function Win:_gripRect()
+    local x = self._x + self._W - 12
+    local y = self._y + self._TH + self._TAB + self._CH - 12
+    return x, y, 12, 12
+end
+
+-- opt #8: _moveBy pre-computes the Vector2 offset ONCE and reuses it for every
+-- plain Drawing in _objs — no per-object allocation (was N allocs per drag tick)
+function Win:_moveBy(dx,dy)
+    if dx==0 and dy==0 then return end
+    self._x = self._x + dx
+    self._y = self._y + dy
+    local off = v2(dx,dy)   -- single alloc for the whole loop
+    local objs = self._objs
+    for i=1,#objs do
+        local o = objs[i]
+        -- opt #7: no pcall — all objects in _objs are valid Drawing objects;
+        --         pcall overhead (C-boundary crossing) is eliminated
+        if o.Position then o.Position = o.Position + off end
+        if o.From     then o.From = o.From + off; o.To = o.To + off end
+    end
+    self._shadow:move(dx,dy)
+    self._body:move(dx,dy)
+    self._titleBg:move(dx,dy)
+    self._sThumb:move(dx,dy)
+    local tabs = self._tabs
+    for i=1,#tabs do tabs[i]:_moveBy(dx,dy) end
+    self._scrollDirty = true
+    if self._min then self:_applyMin() end
+end
+
+-- ── Event loop ───────────────────────────────────────
+function Win:_connect()
+    -- Wrap every connection callback with newcclosure (opt #2):
+    -- C-closures dispatch faster than L-closures inside RBXScriptSignal::Fire
+    local c1 = UIS.InputBegan:Connect(newcclosure(function(inp, gpe)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            if not self._vis then return end
+            local grx,gry,grw,grh = self:_gripRect()
+            if over(grx,gry,grw,grh) and not self._min then
+                self._resizing = true
+                local m = mpos()
+                self._rdox = m.X - self._W
+                self._rdoy = m.Y - self._CH
+                return
+            end
+            self:_click(inp)
+        elseif not gpe and inp.UserInputType == Enum.UserInputType.Keyboard then
+            -- opt #4: single-pass keybind check — check listening flag and fire
+            -- in the SAME loop instead of iterating _kbinds twice
+            local anyListening = false
+            local tabs = self._tabs
+            for i=1,#tabs do
+                local kbs = tabs[i]._kbinds
+                for j=1,#kbs do
+                    if kbs[j].listening then anyListening=true; break end
+                end
+                if anyListening then break end
+            end
+            if not anyListening then
+                local kc = inp.KeyCode
+                local wkbs = self._wkbs
+                for i=1,#wkbs do
+                    local kb = wkbs[i]
+                    if kb.enabled and kc == kb.key then pcall(kb.cb) end
+                end
+                for i=1,#tabs do tabs[i]:_keyDown(kc) end
+            end
+        end
+    end))
+
+    local c2 = UIS.InputEnded:Connect(newcclosure(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            self._drag = false
+            self._resizing = false
+            if self._active then self._active:_mouseUp(inp) end
+        end
+    end))
+
+    local c3c = UIS.InputChanged:Connect(newcclosure(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseMovement then
+            if self._drag then
+                local m = mpos()
+                self:_moveBy(m.X - self._dox - self._x, m.Y - self._doy - self._y)
+                self._dox = m.X - self._x
+                self._doy = m.Y - self._y
+            end
+            if self._resizing then
+                local m = mpos()
+                local newW  = mmax(200, m.X - self._rdox)
+                local newCH = mmax(150, m.Y - self._rdoy)
+                self:SetSize(newW, newCH)
+            end
+            if self._active then self._active:_mouseMove(inp) end
+        end
+        if inp.UserInputType == Enum.UserInputType.MouseWheel then
+            local m = mpos()
+            if over(self._x, self._y+self._TH+self._TAB, self._W, self._CH) then
+                if self._active then
+                    self._active:_scroll(-inp.Position.Z * 22)
+                    self._scrollDirty = true
+                end
+            end
+        end
+    end))
+
+    -- opt #7: RenderStepped only does work when _scrollDirty is set
+    -- AND (opt: isrbxactivemouse) only when the game window is focused
+    local c4 = RS.RenderStepped:Connect(newcclosure(function()
+        if self._scrollDirty then
+            self:_updateScroll()
+        end
+    end))
+
+    self._conns = {c1,c2,c3c,c4}
+end
+
+function Win:_click(inp)
+    local x,y,W,TH,TAB = self._x,self._y,self._W,self._TH,self._TAB
+    if over(x, y, W-55, TH) then
+        self._drag = true
+        local m = mpos()
+        self._dox = m.X - x
+        self._doy = m.Y - y
+    end
+    if over(x+W-24, y+5, 20, 20) then self:SetVisible(false) return end
+    if over(x+W-42, y+5, 20, 20) then
+        self._min = not self._min
+        self:_applyMin()
+        return
+    end
+    local tabs = self._tabs
+    for i=1,#tabs do
+        local tab = tabs[i]
+        if over(tab._bx, tab._by, tab._bw, tab._bh) then
+            self:_selectTab(tab)
+            return
+        end
+    end
+    if self._active and not self._min then
+        self._active:_click(inp)
+    end
+end
+
+function Win:_applyMin()
+    local show = not self._min
+    local x,y,W,TH,TAB,CH = self._x,self._y,self._W,self._TH,self._TAB,self._CH
+    local fullH = TH + TAB + CH
+    local miniH = TH
+    local sh = show and fullH or miniH
+
+    self._shadow.bg.Size     = v2(W, sh)
+    self._shadow.bl.Position = v2(x+4+5,   y+5+sh-5)
+    self._shadow.br.Position = v2(x+4+W-5, y+5+sh-5)
+
+    self._body.bg.Size     = v2(W, sh)
+    self._body.bl.Position = v2(x+5,   y+sh-5)
+    self._body.br.Position = v2(x+W-5, y+sh-5)
+    if self._body.eb then
+        self._body.eb.From = v2(x+5,   y+sh)
+        self._body.eb.To   = v2(x+W-5, y+sh)
+        self._body.el.To   = v2(x,     y+sh-5)
+        self._body.er.To   = v2(x+W,   y+sh-5)
+    end
+
+    local sv = show and self._vis
+    self._tabBg.Visible    = sv
+    self._contBg.Visible   = sv
+    self._sTrack.Visible   = sv
+    self._rgrip.Visible    = sv
+    self._rgripTxt.Visible = sv
+    self._sThumb:vis(sv)
+
+    local tabs = self._tabs
+    for i=1,#tabs do
+        local tab = tabs[i]
+        tab:_setTabVis(sv)
+        if tab == self._active then tab:_setVis(sv) end
+    end
+    self._minTxt.Text = self._min and "□" or "─"
+    self._scrollDirty = true
+end
+
+-- opt #7: dirty-flag prevents any work when scroll state hasn't changed.
+-- opt: isrbxactivemouse gates the whole update when the window isn't focused.
+function Win:_updateScroll()
+    self._scrollDirty = false   -- clear before early-returns to avoid re-entry spam
+    if not self._active or self._min then
+        self._sThumb:vis(false)
+        return
+    end
+    -- skip if game window isn't focused (exploit API: isrbxactivemouse)
+    if not isrbxactivemouse() then return end
+
+    local tab   = self._active
+    local total = tab:_totalH()
+    if total <= self._CH then
+        self._sThumb:vis(false)
+        return
+    end
+    self._sThumb:vis(self._vis)
+
+    local ratio = self._CH / total
+    local th    = mmax(16, self._CH * ratio)
+    local pct   = tab._scrollY / mmax(1, total - self._CH)
+    local ty    = self._y + self._TH + self._TAB + 3 + pct * (self._CH - 6 - th)
+    local tx    = self._x + self._W - 7
+
+    -- opt #7: only update thumb position/size when they actually changed
+    local thInt = mfloor(th)
+    local tyInt = mfloor(ty)
+    if tyInt ~= self._lastThumbY or thInt ~= self._lastThumbH then
+        self._lastThumbY = tyInt
+        self._lastThumbH = thInt
+        local dx = tx - self._sThumb._x
+        local dy = ty - self._sThumb._y
+        if dx ~= 0 or dy ~= 0 then self._sThumb:move(dx,dy) end
+        self._sThumb.bg.Size = v2(4, th)
+    end
+end
+
+function Win:_selectTab(target)
+    local tabs = self._tabs
+    for i=1,#tabs do
+        local t  = tabs[i]
+        local on = (t == target)
+        t:_setActive(on)
+        t:_setVis(on and self._vis and not self._min)
+    end
+    self._active = target
+    self._scrollDirty = true
+end
+
+function Win:_rebuildTabBtns()
+    local n = #self._tabs
+    if n == 0 then return end
+    local bw = mfloor((self._W - 2) / n)
+    local tabs = self._tabs
+    for i=1,n do
+        tabs[i]:_setBtn(
+            self._x + 1 + (i-1)*bw,
+            self._y + self._TH + 1,
+            bw - 1,
+            self._TAB - 2
+        )
+    end
+end
+
+-- ══════════════════════════════════════════════════════
+--  Public Window API
+-- ══════════════════════════════════════════════════════
+function Win:Tab(name)
+    local tab = _Tab.new(self, name)
+    tinsert(self._tabs, tab)
+    self:_rebuildTabBtns()
+    if #self._tabs == 1 then self:_selectTab(tab) end
+    return tab
+end
+
+function Win:SetVisible(v)
+    self._vis = v
+    self._modalGui.Enabled = v
+    if v then _showCursor() else _hideCursor() end
+    local objs = self._objs
+    for i=1,#objs do objs[i].Visible = v end
+    self._shadow:vis(v); self._body:vis(v)
+    self._titleBg:vis(v); self._sThumb:vis(v)
+    local tabs = self._tabs
+    for i=1,#tabs do tabs[i]:_setTabVis(v) end
+    if self._active then self._active:_setVis(v) end
+    self._scrollDirty = true
+end
+
+-- opt #6: SetTransparency iterates the flat _subs array on each RR group
+-- instead of looping over {"bg","tl","tr","bl","br","et","eb","el","er"} with
+-- rawget string-key lookups (was 9 string hashes per RR per call)
+function Win:SetTransparency(a)
+    a = clamp(a,0,1)
+    local objs = self._objs
+    for i=1,#objs do objs[i].Transparency = a end
+    local rrs = {self._shadow, self._body, self._titleBg, self._sThumb}
+    for i=1,#rrs do
+        local subs = rrs[i]._subs
+        for j=1,#subs do subs[j].Transparency = a end
+    end
+end
+
+function Win:SetPosition(p)
+    self:_moveBy(p.X - self._x, p.Y - self._y)
+end
+
+function Win:SetSize(w, h)
+    self._W  = w or self._W
+    self._CH = h or self._CH
+    local x,y,W,TH,TAB,CH = self._x,self._y,self._W,self._TH,self._TAB,self._CH
+    local totalH  = TH+TAB+CH      -- hoisted: used 10×
+    local THTAB   = TH+TAB         -- hoisted: used 4×
+    local yTH     = y+TH           -- hoisted: used 4×
+    local yTHTAB  = y+THTAB        -- hoisted: used 3×
+    local xW5     = x+W-5          -- hoisted: used 4×
+    local x5      = x+5            -- hoisted: used 4×
+
+    self._shadow.bg.Position = v2(x+4, y+5)
+    self._shadow.bg.Size     = v2(W, totalH)
+    self._shadow.tl.Position = v2(x+4+5,       y+5+5)
+    self._shadow.tr.Position = v2(x+4+W-5,     y+5+5)
+    self._shadow.bl.Position = v2(x+4+5,       y+5+totalH-5)
+    self._shadow.br.Position = v2(x+4+W-5,     y+5+totalH-5)
+    self._shadow._x=x+4; self._shadow._y=y+5
+
+    self._body.bg.Position = v2(x, y)
+    self._body.bg.Size     = v2(W, totalH)
+    self._body.tl.Position = v2(x5,   y+5)
+    self._body.tr.Position = v2(xW5,  y+5)
+    self._body.bl.Position = v2(x5,   y+totalH-5)
+    self._body.br.Position = v2(xW5,  y+totalH-5)
+    if self._body.et then
+        self._body.et.From=v2(x5,y);           self._body.et.To=v2(xW5,y)
+        self._body.eb.From=v2(x5,y+totalH);    self._body.eb.To=v2(xW5,y+totalH)
+        self._body.el.From=v2(x,y+5);          self._body.el.To=v2(x,y+totalH-5)
+        self._body.er.From=v2(x+W,y+5);        self._body.er.To=v2(x+W,y+totalH-5)
+    end
+    self._body._x=x; self._body._y=y
+
+    self._titleBg.bg.Position = v2(x, y)
+    self._titleBg.bg.Size     = v2(W, TH)
+    self._titleBg.tl.Position = v2(x5,  y+5)
+    self._titleBg.tr.Position = v2(xW5, y+5)
+    self._titleBg.bl.Position = v2(x5,  yTH-5)
+    self._titleBg.br.Position = v2(xW5, yTH-5)
+    self._titleBg._x=x; self._titleBg._y=y
+
+    self._stripe.Position   = v2(x,     yTH-2)
+    self._stripe.Size       = v2(W,     2)
+    self._dot.Position      = v2(x+14,  y+TH/2)
+    self._closeTxt.Position = v2(x+W-17,y+7)
+    self._minTxt.Position   = v2(x+W-33,y+10)
+    self._tabBg.Position    = v2(x,     yTH)
+    self._tabBg.Size        = v2(W,     TAB)
+    self._contBg.Position   = v2(x,     yTHTAB)
+    self._contBg.Size       = v2(W,     CH)
+    local xW7 = x+W-7
+    local yTHTAB3 = yTHTAB+3
+    self._sTrack.Position   = v2(xW7,   yTHTAB3)
+    self._sTrack.Size       = v2(4,     CH-6)
+    self._sThumb:move(xW7 - self._sThumb._x, yTHTAB3 - self._sThumb._y)
+
+    local rx2 = x+W-12;  local ry2 = y+totalH-12
+    self._rgrip.Position    = v2(rx2,   ry2)
+    self._rgripTxt.Position = v2(rx2+6, ry2+1)
+
+    self:_rebuildTabBtns()
+    local tabs = self._tabs
+    for i=1,#tabs do tabs[i]:_reflow() end
+    self._scrollDirty = true
+end
+
+-- creation opt #5: Change/Enable/Disable/Remove were closures re-created per
+-- Win:Keybind() call. Now they're shared methods on _WKB_mt.
+-- Remove still needs access to self._wkbs, stored on the window, so we store
+-- a back-reference _win on the kb entry at creation time.
+local _WKB_mt = {}
+_WKB_mt.__index = _WKB_mt
+function _WKB_mt:Change(k)  self.key = k end
+function _WKB_mt:Enable()   self.enabled = true end
+function _WKB_mt:Disable()  self.enabled = false end
+function _WKB_mt:Remove()
+    local wkbs = self._win._wkbs
+    for i=1,#wkbs do
+        if wkbs[i]==self then table.remove(wkbs,i); break end
+    end
+end
+
+function Win:Keybind(label, keyCode, cb)
+    local kb = setmetatable({key=keyCode, cb=cb, enabled=true, label=label, _win=self}, _WKB_mt)
+    tinsert(self._wkbs, kb)
+    return kb
+end
+
+function Win:Destroy()
+    _hideCursor()
+    local conns = self._conns
+    for i=1,#conns do conns[i]:Disconnect() end
+    local objs = self._objs
+    for i=1,#objs do pcall(function() objs[i]:Remove() end) end
+    self._shadow:destroy(); self._body:destroy()
+    self._titleBg:destroy(); self._sThumb:destroy()
+    pcall(function() self._modalGui:Destroy() end)
+    local tabs = self._tabs
+    for i=1,#tabs do tabs[i]:_destroy() end
+    table.clear(self._objs)
+    table.clear(self._tabs)
+end
+
+-- ══════════════════════════════════════════════════════
+--  Tab
+-- ══════════════════════════════════════════════════════
+_Tab = {}
+_Tab.__index = _Tab
+
+function _Tab.new(win, name)
+    local t = setmetatable({}, _Tab)
+    t._win    = win
+    t._name   = name
+    t._items  = {}
+    t._scrollY = 0
+    t._vis    = false
+    t._objs   = {}
+    t._kbinds = {}
+
+    t._bx,t._by,t._bw,t._bh = 0,0,60,win._TAB-2
+    t._bbg  = mkRect(0,0,60,win._TAB-2, T.Surface2, 1)
+    t._btxt = mkTxt(name, 0,0, 11, T.TextDim, 1, true)
+    t._bbar = mkRect(0,0,60,2, T.Accent, 0)
+    tinsert(t._objs, t._bbg)
+    tinsert(t._objs, t._btxt)
+    tinsert(t._objs, t._bbar)
+    return t
+end
+
+function _Tab:_o(obj)
+    tinsert(self._objs, obj)
+    return obj
+end
+
+function _Tab:_setBtn(x,y,w,h)
+    self._bx=x; self._by=y; self._bw=w; self._bh=h
+    self._bbg.Position  = v2(x,y)
+    self._bbg.Size      = v2(w,h)
+    self._btxt.Position = v2(x+w/2, y+h/2-6)
+    self._bbar.Position = v2(x, y+h-2)
+    self._bbar.Size     = v2(w, 2)
+end
+
+function _Tab:_setActive(on)
+    self._bbg.Color  = on and T.AccentDi or T.Surface2
+    self._btxt.Color = on and T.Text     or T.TextDim
+    self._bbar.Transparency = on and 1 or 0
+end
+
+function _Tab:_setTabVis(v)
+    self._bbg.Visible  = v
+    self._btxt.Visible = v
+    self._bbar.Visible = v
+end
+
+function _Tab:_setVis(v)
+    self._vis = v
+    if v then self:_reflow() end
+    local items = self._items
+    for i=1,#items do
+        local item = items[i]
+        item:_setVis(v and item._inView)
+    end
+end
+
+function _Tab:_totalH()
+    local PAD = self._win._PAD
+    local h   = PAD
+    local items = self._items
+    local IH    = self._win._IH
+    for i=1,#items do
+        h = h + (items[i]._IH or IH) + PAD
+    end
+    return h
+end
+
+-- opt #5: _reflow only calls _setVis when the inView state CHANGES,
+-- avoiding redundant show/hide calls on every scroll tick
+function _Tab:_reflow()
+    local win  = self._win
+    local IH   = win._IH
+    local PAD  = win._PAD
+    local top  = win._y + win._TH + win._TAB
+    local bot  = top + win._CH
+    local iw   = win._W - 20
+    local ix   = win._x + 8
+    local sy   = top + PAD
+    local items = self._items
+    for i=1,#items do
+        local item = items[i]
+        local ih   = item._IH or IH
+        local iy   = sy - self._scrollY
+        item:_repos(ix, iy, iw)
+        local inView = (iy >= top) and (iy + ih <= bot)
+        -- opt: only toggle visibility when it actually changes
+        if inView ~= item._inView then
+            item._inView = inView
+            if self._vis then item:_setVis(inView) end
+        end
+        sy = sy + ih + PAD
+    end
+end
+
+function _Tab:_addItem(item)
+    tinsert(self._items, item)
+    item._inView = true
+    self:_reflow()
+    if not self._vis then item:_setVis(false) end
+end
+
+function _Tab:_scroll(dy)
+    local max = mmax(0, self:_totalH() - self._win._CH)
+    self._scrollY = clamp(self._scrollY + dy, 0, max)
+    self:_reflow()
+end
+
+function _Tab:_click(inp)
+    local items = self._items
+    for i=1,#items do
+        local item = items[i]
+        if item._isDropdown and item._open then
+            if item._click then item:_click(inp) end
+            return
+        end
+    end
+    for i=1,#items do
+        local item = items[i]
+        if item._inView and item._click then item:_click(inp) end
+    end
+end
+
+function _Tab:_mouseUp(inp)
+    local items = self._items
+    for i=1,#items do
+        local item = items[i]
+        if item._mouseUp then item:_mouseUp(inp) end
+    end
+end
+
+function _Tab:_mouseMove(inp)
+    local items = self._items
+    for i=1,#items do
+        local item = items[i]
+        if item._inView and item._mouseMove then item:_mouseMove(inp) end
+    end
+end
+
+-- opt #4: single-pass — no double iteration over _kbinds
+function _Tab:_keyDown(keyCode)
+    local kbs = self._kbinds
+    for i=1,#kbs do
+        if kbs[i].listening then return end   -- bail on first listening item
+    end
+    for i=1,#kbs do
+        local kb = kbs[i]
+        if kb.enabled and kb.key == keyCode then pcall(kb.cb) end
+    end
+end
+
+-- opt #8: _moveBy allocates ONE Vector2 offset for the button drawings,
+-- then passes scalars dx,dy to each item which does its own single alloc
+function _Tab:_moveBy(dx,dy)
+    if dx==0 and dy==0 then return end
+    self._bx = self._bx + dx
+    self._by = self._by + dy
+    local off = v2(dx,dy)
+    self._bbg.Position  = self._bbg.Position  + off
+    self._btxt.Position = self._btxt.Position + off
+    self._bbar.Position = self._bbar.Position + off
+    local items = self._items
+    for i=1,#items do items[i]:_moveBy(dx,dy) end
+end
+
+function _Tab:_destroy()
+    local objs = self._objs
+    for i=1,#objs do pcall(function() objs[i]:Remove() end) end
+    local items = self._items
+    for i=1,#items do
+        if items[i]._destroy then items[i]:_destroy() end
+    end
+end
+
+-- ── Item base ────────────────────────────────────────
+-- creation opt #3: _o and _destroy used to be closures re-created per item.
+-- _destroy is now a single shared function on _Item_mt (zero alloc per item).
+-- _o needs `tab` to push into tab._objs; it becomes a module-level function
+-- called as _itemO(self, tab, o) so no closure is captured at construction.
+-- Each newItem() now allocates just one table — no extra function objects.
+local _Item_mt = {}
+_Item_mt.__index = _Item_mt
+
+function _Item_mt:_destroy()
+    local objs = self._objs
+    for i=1,#objs do pcall(function() objs[i]:Remove() end) end
+end
+
+-- Module-level helper; items call it:_o(o) which Lua desugars to _itemO(it, o).
+-- We store _tab on the item at construction so no closure is needed.
+local function _itemO(self, o)
+    tinsert(self._objs, o)
+    tinsert(self._tab._objs, o)
+    return o
+end
+
+local function newItem(tab)
+    -- creation opt #3: setmetatable costs one C call; far cheaper than 2 closure allocs
+    local it = setmetatable({_tab=tab, _inView=true, _x=0,_y=0,_w=0, _objs={}}, _Item_mt)
+    it._o = _itemO   -- shared function reference, not a new closure
+    return it
+end
+
+-- ══════════════════════════════════════════════════════
+--  Label
+-- ══════════════════════════════════════════════════════
+function _Tab:Label(text)
+    local it = newItem(self)
+    it._bg  = it:_o(mkRect(0,0,10,30, T.Surface, 0.5))
+    it._bar = it:_o(mkRect(0,0,2, 30, T.AccentDi,1))
+    it._txt = it:_o(mkTxt(text,0,0, 13, T.TextDim))
+
+    function it:_repos(x,y,w)
+        self._x=x;self._y=y;self._w=w
+        self._bg.Position=v2(x,y);   self._bg.Size=v2(w,30)
+        self._bar.Position=v2(x,y);  self._bar.Size=v2(2,30)
+        self._txt.Position=v2(x+10,y+8)
+    end
+    function it:_setVis(v)
+        self._bg.Visible=v; self._bar.Visible=v; self._txt.Visible=v
+    end
+    function it:_moveBy(dx,dy)
+        self._x=self._x+dx; self._y=self._y+dy
+        local off=v2(dx,dy)
+        self._bg.Position=self._bg.Position+off
+        self._bar.Position=self._bar.Position+off
+        self._txt.Position=self._txt.Position+off
+    end
+    function it:SetText(t) self._txt.Text=t end
+
+    self:_addItem(it)
+    return it
+end
+
+-- ══════════════════════════════════════════════════════
+--  Button
+-- ══════════════════════════════════════════════════════
+function _Tab:Button(text, cb)
+    local it = newItem(self)
+    it._cb  = cb
+    it._bg  = mkRR(0,0,10,30, T.AccentDi,1, T.Accent,0.7)
+    it._txt = it:_o(mkTxt(text,0,0,13,T.Text,1,true))
+    it._shim= it:_o(mkLine(0,0,1,0,T.AccentGl,1,0.35))
+
+    function it:_repos(x,y,w)
+        self._x=x;self._y=y;self._w=w
+        self._bg:move(x - self._bg._x, y - self._bg._y)
+        self._bg.bg.Size=v2(w,30)
+        self._txt.Position=v2(x+w/2, y+8)
+        self._shim.From=v2(x+4,y+1); self._shim.To=v2(x+w-4,y+1)
+    end
+    function it:_setVis(v)
+        self._bg:vis(v); self._txt.Visible=v; self._shim.Visible=v
+    end
+    function it:_moveBy(dx,dy)
+        self._x=self._x+dx; self._y=self._y+dy
+        self._bg:move(dx,dy)
+        local off=v2(dx,dy)
+        self._txt.Position=self._txt.Position+off
+        self._shim.From=self._shim.From+off
+        self._shim.To=self._shim.To+off
+    end
+    function it:_click(inp)
+        if inp.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+        if over(self._x,self._y,self._w,30) then
+            self._bg:col(T.AccentGl)
+            task.delay(0.12, function() self._bg:col(T.AccentDi) end)
+            if self._cb then pcall(self._cb) end
+        end
+    end
+    function it:SetCallback(f) self._cb=f end
+    function it:Click() if self._cb then pcall(self._cb) end end
+
+    self:_addItem(it)
+    return it
+end
+
+-- ══════════════════════════════════════════════════════
+--  Toggle
+-- ══════════════════════════════════════════════════════
+function _Tab:Toggle(text, default, cb)
+    local it = newItem(self)
+    it._state = default or false
+    it._cb    = cb
+    local TW,TH = 32,16
+
+    it._bg   = it:_o(mkRect(0,0,10,30, T.Surface,1))
+    it._bar  = it:_o(mkRect(0,0,2, 30, T.Border, 1))
+    it._txt  = it:_o(mkTxt(text,0,0,13,T.Text))
+    it._pill = mkRR(0,0,TW,TH, T.Surface2,1, T.Border,0.6)
+    it._knob = it:_o(mkCirc(0,0, TH/2-2, T.TextDim,1,true))
+
+    local function refresh(it)
+        it._pill:col(it._state and T.Success or T.Surface2)
+        it._knob.Color = it._state and T.Text or T.TextDim
+        local kx = it._state and (it._x+it._w-14-TH/2+2) or (it._x+it._w-14-TW+TH/2)
+        it._knob.Position = v2(kx, it._y+15)
+    end
+
+    function it:_repos(x,y,w)
+        self._x=x;self._y=y;self._w=w
+        self._bg.Position=v2(x,y); self._bg.Size=v2(w,30)
+        self._bar.Position=v2(x,y); self._bar.Size=v2(2,30)
+        self._txt.Position=v2(x+10,y+8)
+        local px=x+w-14-TW; local py=y+7
+        self._pill:move(px-self._pill._x, py-self._pill._y)
+        self._pill.bg.Size=v2(TW,TH)
+        refresh(self)
+    end
+    function it:_setVis(v)
+        self._bg.Visible=v; self._bar.Visible=v; self._txt.Visible=v
+        self._pill:vis(v); self._knob.Visible=v
+    end
+    function it:_moveBy(dx,dy)
+        self._x=self._x+dx; self._y=self._y+dy
+        local off=v2(dx,dy)
+        self._bg.Position=self._bg.Position+off
+        self._bar.Position=self._bar.Position+off
+        self._txt.Position=self._txt.Position+off
+        self._pill:move(dx,dy)
+        self._knob.Position=self._knob.Position+off
+    end
+    function it:_click(inp)
+        if inp.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+        if over(self._x,self._y,self._w,30) then
+            self._state=not self._state
+            refresh(self)
+            if self._cb then pcall(self._cb, self._state) end
+        end
+    end
+    function it:Set(v, silent)
+        self._state=v; refresh(self)
+        if not silent and self._cb then pcall(self._cb, self._state) end
+    end
+    function it:Get() return self._state end
+    function it:SetCallback(f) self._cb = f end
+
+    self:_addItem(it)
+    return it
+end
+
+-- ══════════════════════════════════════════════════════
+--  Slider
+-- ══════════════════════════════════════════════════════
+function _Tab:Slider(text, default, min, max, cb)
+    local it = newItem(self)
+    it._IH   = 38
+    it._val  = clamp(default or min, min, max)
+    it._min  = min; it._max = max; it._cb = cb
+    it._drag = false
+
+    it._bg   = it:_o(mkRect(0,0,10,38, T.Surface,1))
+    it._lbl  = it:_o(mkTxt(text,0,0,11,T.TextDim))
+    it._valt = it:_o(mkTxt(tostring(it._val),0,0,11,T.Accent,1,true))
+    it._trk  = it:_o(mkRect(0,0,10,4, T.Surface2,1))
+    it._fill = it:_o(mkRect(0,0,2, 4, T.Accent,1))
+    it._knob = it:_o(mkCirc(0,0,6, T.AccentGl,1,true))
+    it._kbrd = it:_o(mkCirc(0,0,7, T.Accent,0.4,false,1))
+
+    local function refresh(it)
+        local pct = (it._val-it._min)/(it._max-it._min)
+        local tw  = it._w - 24
+        local tx  = it._x + 10
+        local ty  = it._y + 22
+        it._trk.Position  = v2(tx, ty)
+        it._trk.Size      = v2(tw, 4)
+        it._fill.Position = v2(tx, ty)
+        it._fill.Size     = v2(mmax(2, tw*pct), 4)
+        local kx = tx + tw*pct
+        it._knob.Position = v2(kx, ty+2)
+        it._kbrd.Position = v2(kx, ty+2)
+        it._valt.Text     = fmt("%.1f", it._val)
+        it._valt.Position = v2(it._x+it._w-23, it._y+4)
+    end
+
+    function it:_repos(x,y,w)
+        self._x=x; self._y=y; self._w=w
+        self._bg.Position  = v2(x,y)
+        self._bg.Size      = v2(w,38)
+        self._lbl.Position = v2(x+10, y+5)
+        refresh(self)
+    end
+    function it:_setVis(v)
+        self._bg.Visible=v; self._lbl.Visible=v; self._valt.Visible=v
+        self._trk.Visible=v; self._fill.Visible=v
+        self._knob.Visible=v; self._kbrd.Visible=v
+    end
+    -- opt #8: single alloc per moveBy call across all slider drawings
+    function it:_moveBy(dx,dy)
+        self._x=self._x+dx; self._y=self._y+dy
+        local off=v2(dx,dy)
+        local objs=self._objs
+        for i=1,#objs do
+            local o=objs[i]
+            if o.Position then o.Position=o.Position+off end
+        end
+    end
+    function it:_click(inp)
+        if inp.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+        if over(self._x,self._y,self._w,38) then
+            self._drag=true; self:_apply()
+        end
+    end
+    function it:_mouseUp(inp)
+        if inp.UserInputType==Enum.UserInputType.MouseButton1 then self._drag=false end
+    end
+    function it:_mouseMove()
+        if self._drag then self:_apply() end
+    end
+    function it:_apply()
+        local m=mpos()
+        local pct=clamp((m.X-(self._x+10))/(self._w-24),0,1)
+        self._val=self._min+(self._max-self._min)*pct
+        self._val=mfloor(self._val*10+0.5)/10
+        refresh(self)
+        if self._cb then pcall(self._cb,self._val) end
+    end
+    function it:Set(v, silent)
+        self._val=clamp(v,self._min,self._max)
+        refresh(self)
+        if not silent and self._cb then pcall(self._cb,self._val) end
+    end
+    function it:Get() return self._val end
+    function it:SetCallback(f) self._cb = f end
+
+    self:_addItem(it)
+    return it
+end
+
+-- ══════════════════════════════════════════════════════
+--  Dropdown
+-- ══════════════════════════════════════════════════════
+function _Tab:Dropdown(text, options, cb)
+    local it = newItem(self)
+    it._isDropdown = true
+    it._sel  = options[1]; it._opts = options; it._cb = cb; it._open = false
+    it._rows = nil
+
+    it._bg   = mkRR(0,0,10,30, T.Surface,1, T.Border,0.5)
+    it._lbl  = it:_o(mkTxt(text,  0,0, 11, T.TextDim))
+    it._selt = it:_o(mkTxt(options[1], 0,0, 13, T.Text, 1, true))
+    it._arr  = it:_o(mkTxt("▼", 0,0, 11, T.Accent, 1, true))
+
+    local function buildRows(it)
+        if it._rows then return end
+        it._rows = {}
+        local opts = it._opts
+        for i=1,#opts do
+            local opt = opts[i]
+            local r = {}
+            r._bg  = mkRect(0,0,it._w,26, T.Surface2, 1)
+            r._brd = mkRect(0,0,it._w,26, T.Border, 1, false, 1)
+            r._txt = mkTxt(opt, 0,0, 13, T.Text, 1, true)
+            r._bg.Visible  = false
+            r._brd.Visible = false
+            r._txt.Visible = false
+            r._opt = opt
+            it:_o(r._bg); it:_o(r._brd); it:_o(r._txt)
+            it._rows[i] = r
+        end
+        it:_layoutRows()
+    end
+
+    function it:_layoutRows()
+        if not self._rows then return end
+        local oy = self._y + 32
+        local rows = self._rows
+        for i=1,#rows do
+            local r = rows[i]
+            r._bg.Position  = v2(self._x, oy)
+            r._bg.Size      = v2(self._w, 26)
+            r._brd.Position = v2(self._x, oy)
+            r._brd.Size     = v2(self._w, 26)
+            r._txt.Position = v2(self._x + self._w/2, oy + 5)
+            r._px = self._x; r._py = oy; r._pw = self._w; r._ph = 26
+            oy = oy + 28
+        end
+    end
+
+    function it:_openList()
+        buildRows(self)
+        self._open = true
+        self._arr.Text = "▲"
+        self:_layoutRows()
+        local rows = self._rows
+        for i=1,#rows do
+            rows[i]._bg.Visible  = true
+            rows[i]._brd.Visible = true
+            rows[i]._txt.Visible = true
+        end
+    end
+
+    function it:_closeList()
+        self._open = false
+        self._arr.Text = "▼"
+        if self._rows then
+            local rows = self._rows
+            for i=1,#rows do
+                rows[i]._bg.Visible  = false
+                rows[i]._brd.Visible = false
+                rows[i]._txt.Visible = false
+            end
+        end
+    end
+
+    function it:_repos(x,y,w)
+        self._x=x; self._y=y; self._w=w
+        self._bg:move(x - self._bg._x, y - self._bg._y)
+        self._bg.bg.Size    = v2(w, 30)
+        self._lbl.Position  = v2(x+10, y+4)
+        self._selt.Position = v2(x+w/2, y+8)
+        self._arr.Position  = v2(x+w-12, y+8)
+        self:_layoutRows()
+    end
+
+    function it:_setVis(v)
+        self._bg:vis(v)
+        self._lbl.Visible  = v
+        self._selt.Visible = v
+        self._arr.Visible  = v
+        if not v then self:_closeList() end
+    end
+
+    function it:_moveBy(dx,dy)
+        self._x = self._x+dx; self._y = self._y+dy
+        self._bg:move(dx,dy)
+        local off = v2(dx,dy)
+        self._lbl.Position  = self._lbl.Position  + off
+        self._selt.Position = self._selt.Position + off
+        self._arr.Position  = self._arr.Position  + off
+        if self._rows then
+            local rows = self._rows
+            for i=1,#rows do
+                local r = rows[i]
+                r._bg.Position  = r._bg.Position  + off
+                r._brd.Position = r._brd.Position + off
+                r._txt.Position = r._txt.Position + off
+                if r._px then r._px=r._px+dx; r._py=r._py+dy end
+            end
+        end
+    end
+
+    function it:_click(inp)
+        if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+        if over(self._x, self._y, self._w, 30) then
+            if self._open then self:_closeList() else self:_openList() end
+            return
+        end
+        if self._open and self._rows then
+            local rows = self._rows
+            for i=1,#rows do
+                local r = rows[i]
+                if r._px and over(r._px, r._py, r._pw, r._ph) then
+                    self._sel = r._opt
+                    self._selt.Text = r._opt
+                    self:_closeList()
+                    if self._cb then pcall(self._cb, self._sel) end
+                    return
+                end
+            end
+            self:_closeList()
+        end
+    end
+
+    function it:Get() return self._sel end
+    function it:Set(v, silent)
+        local opts = self._opts
+        for i=1,#opts do
+            if opts[i] == v then
+                self._sel = v
+                self._selt.Text = v
+                if not silent and self._cb then pcall(self._cb, v) end
+                break
+            end
+        end
+    end
+    function it:SetCallback(f) self._cb = f end
+
+    self:_addItem(it)
+    return it
+end
+
+-- ══════════════════════════════════════════════════════
+--  Textbox
+-- ══════════════════════════════════════════════════════
+function _Tab:Textbox(label, placeholder, cb)
+    local it = newItem(self)
+    it._val=""; it._ph=placeholder or ""; it._cb=cb; it._focus=false
+
+    it._bg  = mkRR(0,0,10,30, T.Surface,1, T.Border,0.6)
+    it._lbl = it:_o(mkTxt(label,0,0,11,T.TextDim))
+    it._txt = it:_o(mkTxt(placeholder,0,0,13,T.TextDim))
+    it._cur = it:_o(mkRect(0,0,1,14, T.Accent,0))
+
+    local kconn
+    function it:_repos(x,y,w)
+        self._x=x;self._y=y;self._w=w
+        self._bg:move(x-self._bg._x, y-self._bg._y)
+        self._bg.bg.Size=v2(w,30)
+        self._lbl.Position=v2(x+10,y+4)
+        self._txt.Position=v2(x+10,y+10)
+        self._cur.Position=v2(x+10,y+9)
+    end
+    function it:_setVis(v)
+        self._bg:vis(v); self._lbl.Visible=v; self._txt.Visible=v
+        self._cur.Visible = v and self._focus
+    end
+    function it:_moveBy(dx,dy)
+        self._x=self._x+dx; self._y=self._y+dy
+        self._bg:move(dx,dy)
+        local off=v2(dx,dy)
+        self._lbl.Position=self._lbl.Position+off
+        self._txt.Position=self._txt.Position+off
+        self._cur.Position=self._cur.Position+off
+    end
+    function it:_click(inp)
+        if inp.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+        local nf = over(self._x,self._y,self._w,30)
+        if nf==self._focus then return end
+        self._focus=nf
+        self._cur.Transparency = nf and 1 or 0
+        self._bg:col(nf and T.Surface2 or T.Surface)
+        if nf then
+            if kconn then kconn:Disconnect() end
+            kconn = UIS.InputBegan:Connect(newcclosure(function(ki,gp)
+                if gp or not self._focus then return end
+                if ki.UserInputType~=Enum.UserInputType.Keyboard then return end
+                if ki.KeyCode==Enum.KeyCode.Return then
+                    self._focus=false; self._cur.Transparency=0
+                    self._bg:col(T.Surface)
+                    if self._cb then pcall(self._cb,self._val) end
+                    kconn:Disconnect()
+                elseif ki.KeyCode==Enum.KeyCode.Backspace then
+                    self._val=string.sub(self._val,1,-2)
+                else
+                    local ch=ki.KeyCode.Name
+                    if #ch==1 then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and ch:upper() or ch:lower())
+                    end
+                end
+                local d=self._val=="" and self._ph or self._val
+                self._txt.Text=d; self._txt.Color=self._val=="" and T.TextDim or T.Text
+                self._cur.Position=v2(self._x+10+#self._val*7, self._y+9)
+            end))
+        end
+    end
+    function it:Get() return self._val end
+    function it:Set(v) self._val=v; self._txt.Text=v; self._txt.Color=T.Text end
+
+    self:_addItem(it)
+    return it
+end
+
+-- ══════════════════════════════════════════════════════
+--  Keybind
+-- ══════════════════════════════════════════════════════
+function _Tab:Keybind(label, defaultKey, cb)
+    local it = newItem(self)
+    it._key      = defaultKey
+    it._cb       = cb
+    it._listening= false
+    it._enabled  = true
+
+    it._bg   = it:_o(mkRect(0,0,10,30, T.Surface,1))
+    it._bar  = it:_o(mkRect(0,0,2,  30, T.Accent, 1))
+    it._lbl  = it:_o(mkTxt(label,0,0,13,T.Text,1,true))
+    it._kbg  = mkRR(0,0,62,20, T.Surface2,1, T.Border,0.7)
+    it._ktxt = it:_o(mkTxt(defaultKey.Name,0,0,11,T.Accent,1,true))
+
+    local kbEntry = {key=defaultKey, cb=cb, enabled=true, listening=false}
+    tinsert(self._kbinds, kbEntry)
+    it._kbEntry = kbEntry
+
+    local lconn
+    local function refresh(it)
+        it._ktxt.Text  = it._listening and "[ ? ]" or it._key.Name
+        it._ktxt.Color = it._listening and T.Warning or T.Accent
+        it._kbg:col(it._listening and T.AccentDi or T.Surface2)
+    end
+
+    function it:_repos(x,y,w)
+        self._x=x;self._y=y;self._w=w
+        self._bg.Position=v2(x,y); self._bg.Size=v2(w,30)
+        self._bar.Position=v2(x,y)
+        self._lbl.Position = v2(x + w/2, y+8)
+        local kx=x+w-68; local ky=y+5
+        self._kbg:move(kx-self._kbg._x, ky-self._kbg._y)
+        self._kbg.bg.Size=v2(62,20)
+        self._ktxt.Position=v2(kx+31,ky+3)
+    end
+    function it:_setVis(v)
+        self._bg.Visible=v; self._bar.Visible=v; self._lbl.Visible=v
+        self._kbg:vis(v); self._ktxt.Visible=v
+    end
+    function it:_moveBy(dx,dy)
+        self._x=self._x+dx; self._y=self._y+dy
+        local off=v2(dx,dy)
+        self._bg.Position=self._bg.Position+off
+        self._bar.Position=self._bar.Position+off
+        self._lbl.Position=self._lbl.Position+off
+        self._kbg:move(dx,dy)
+        self._ktxt.Position=self._ktxt.Position+off
+    end
+    local trueCb = cb
+    function it:_click(inp)
+        if inp.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+        local kx=self._x+self._w-68; local ky=self._y+5
+        if over(kx,ky,62,20) then
+            if self._listening then
+                if lconn then lconn:Disconnect(); lconn = nil end
+                self._listening=false
+                self._kbEntry.listening=false
+                self._kbEntry.cb = trueCb
+                refresh(self)
+                return
+            end
+            self._kbEntry.cb = function() end
+            self._listening=true
+            self._kbEntry.listening=true
+            refresh(self)
+            if lconn then lconn:Disconnect() end
+            lconn = UIS.InputBegan:Connect(newcclosure(function(ki,gp)
+                if gp or ki.UserInputType~=Enum.UserInputType.Keyboard then return end
+                self._key=ki.KeyCode
+                self._listening=false
+                self._kbEntry.key=ki.KeyCode
+                self._kbEntry.listening=false
+                self._kbEntry.cb = trueCb
+                refresh(self)
+                lconn:Disconnect(); lconn = nil
+            end))
+        end
+    end
+    function it:SetCallback(f) trueCb = f; self._kbEntry.cb = f end
+    function it:Change(k) self._key=k; self._kbEntry.key=k; refresh(self) end
+    function it:Enable()  self._kbEntry.enabled=true end
+    function it:Disable() self._kbEntry.enabled=false end
+    function it:Get() return self._key end
+
+    self:_addItem(it)
+    return it
+end
+
+-- ══════════════════════════════════════════════════════
+--  Separator
+-- ══════════════════════════════════════════════════════
+function _Tab:Separator(text)
+    local it = newItem(self)
+    it._IH   = 18
+    it._line = it:_o(mkLine(0,9,100,9, T.Border,1,0.6))
+    it._txt  = text and it:_o(mkTxt(text,0,0,11,T.TextDim,1,true)) or nil
+    it._lbg  = text and it:_o(mkRect(0,0,60,14, T.Bg,1))            or nil
+
+    function it:_repos(x,y,w)
+        self._x=x;self._y=y;self._w=w
+        self._line.From=v2(x,y+9); self._line.To=v2(x+w,y+9)
+        if self._txt then
+            self._lbg.Position=v2(x+w/2-30,y+2)
+            self._txt.Position=v2(x+w/2,y+2)
+        end
+    end
+    function it:_setVis(v)
+        self._line.Visible=v
+        if self._txt then self._txt.Visible=v; self._lbg.Visible=v end
+    end
+    function it:_moveBy(dx,dy)
+        self._x=self._x+dx; self._y=self._y+dy
+        local off=v2(dx,dy)
+        self._line.From=self._line.From+off
+        self._line.To=self._line.To+off
+        if self._txt then
+            self._txt.Position=self._txt.Position+off
+            self._lbg.Position=self._lbg.Position+off
+        end
+    end
+
+    self:_addItem(it)
+    return it
+end
+
+function _Tab:Scale()
+    error("Scale is not an addable element. Use win:SetSize() to resize the window.")
+end
+
+-- ══════════════════════════════════════════════════════
+--  Expose Drawing helpers
+-- ══════════════════════════════════════════════════════
+Library.newBox  = newBox
+Library.newLine = newLine
+Library.newText = newText
+Library.newRect = newRect
+
+return Library
