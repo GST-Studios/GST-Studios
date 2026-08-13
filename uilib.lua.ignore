@@ -1381,8 +1381,45 @@ function _Tab:Textbox(label, placeholder, cb)
                     self._val=string.sub(self._val,1,-2)
                 else
                     local ch=ki.KeyCode.Name
+                    -- Handle single letter keys
                     if #ch==1 then
                         self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and ch:upper() or ch:lower())
+                    -- Handle number keys at top of keyboard
+                    elseif ch=="Zero" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and ")" or "0")
+                    elseif ch=="One" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "!" or "1")
+                    elseif ch=="Two" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "@" or "2")
+                    elseif ch=="Three" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "#" or "3")
+                    elseif ch=="Four" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "$" or "4")
+                    elseif ch=="Five" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "%" or "5")
+                    elseif ch=="Six" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "^" or "6")
+                    elseif ch=="Seven" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "&" or "7")
+                    elseif ch=="Eight" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "*" or "8")
+                    elseif ch=="Nine" then self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "(" or "9")
+                    -- Handle special characters
+                    elseif ch=="Minus" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "_" or "-")
+                    elseif ch=="Equals" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "+" or "=")
+                    elseif ch=="LeftBracket" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "{" or "[")
+                    elseif ch=="RightBracket" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "}" or "]")
+                    elseif ch=="Backslash" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "|" or "\\")
+                    elseif ch=="Semicolon" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and ":" or ";")
+                    elseif ch=="Quote" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "\"" or "'")
+                    elseif ch=="Comma" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "<" or ",")
+                    elseif ch=="Period" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and ">" or ".")
+                    elseif ch=="Slash" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "?" or "/")
+                    elseif ch=="BackQuote" then
+                        self._val=self._val..(UIS:IsKeyDown(Enum.KeyCode.LeftShift) and "~" or "`")
+                    elseif ch=="Space" then
+                        self._val=self._val.." "
                     end
                 end
                 local d=self._val=="" and self._ph or self._val
