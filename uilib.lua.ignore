@@ -932,7 +932,11 @@ function _Item_mt:_destroy()
     local objs = self._objs
     for i=1,#objs do 
         local obj = objs[i]
-        pcall(function() obj:Remove() end)
+        -- Hide and remove the drawing object
+        pcall(function() 
+            obj.Visible = false
+            obj:Remove() 
+        end)
         -- Also remove from tab's object list
         if self._tab and self._tab._objs then
             for j=#self._tab._objs,1,-1 do
@@ -942,6 +946,8 @@ function _Item_mt:_destroy()
             end
         end
     end
+    -- Clear the item's object list
+    self._objs = {}
 end
 
 -- Module-level helper; items call it:_o(o) which Lua desugars to _itemO(it, o).
