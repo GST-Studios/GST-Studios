@@ -1,0 +1,143 @@
+--[[
+    Combat Surf Script — uses DrawingUI lib
+]]
+
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+local Players           = game:GetService("Players")
+local LocalPlayer       = Players.LocalPlayer
+
+local ClientInventory = require(ReplicatedStorage.ClientInventory)
+local inv = ClientInventory.Inventory
+
+local UI   = loadstring(game:HttpGet("https://lilslinger.neocities.org/docs/DrawingLibV2"))()
+local win  = UI:Window("Combat Surf", Vector2.new(300, 180))
+local main = win:Tab("Weapon Modifications")
+local cfg  = win:Tab("Config")
+
+win:Keybind("Toggle UI", Enum.KeyCode.RightShift, function()
+    win:SetVisible(not win._vis)
+end)
+
+-- ── Weapon cache ──────────────────────────────────────
+-- Re-built only when the player's equipped loadout attributes change,
+-- not on every single tick.
+local _weaponCache = {}
+
+local function rebuildCache()
+    _weaponCache = {
+        inv[LocalPlayer:GetAttribute("Primary")],
+        inv[LocalPlayer:GetAttribute("Secondary")],
+        inv[LocalPlayer:GetAttribute("Knife")],
+    }
+end
+
+rebuildCache()
+LocalPlayer.AttributeChanged:Connect(function(attr)
+    if attr == "Primary" or attr == "Secondary" or attr == "Knife" then
+        rebuildCache()
+    end
+end)
+
+-- ── Hoisted constant tables ───────────────────────────
+-- Allocated ONCE at load time, reused every Heartbeat tick.
+-- Previously each tick did: statChange("SprayPattern", {CFrame.new()})
+-- which allocated a new table + new CFrame every single frame.
+local ZERO_SPRAY   = { CFrame.new() }
+
+local ZERO_BLOOM = {
+    MinBloom    = 0,
+    MaxBloom    = 0,
+    Snappiness  = 100000,
+    StableSpeed = 10000,
+}
+
+local ZERO_RECOIL = {
+    RecoilY     = 0,
+    RecoilX     = 0,
+    RecoilZ     = 0,
+    ReturnSpeed = 1000,
+    Snappiness  = 0,
+}
+
+-- ── Helpers ───────────────────────────────────────────
+local function applyToStats(stat, val)
+    for i = 1, #_weaponCache do
+        local w = _weaponCache[i]
+        if w and w.GunStats then
+            w.GunStats[stat] = val
+        end
+    end
+end
+
+local function applyToSubTable(key, src)
+    for i = 1, #_weaponCache do
+        local w = _weaponCache[i]
+        if w and w.GunStats then
+            local t = w.GunStats[key]
+            if t then
+                for k, v in next, src do
+                    t[k] = v
+                end
+            end
+        end
+    end
+end
+
+-- ── Single shared Heartbeat loop ─────────────────────
+-- One connection instead of 4 separate task.spawn+while loops.
+-- Each feature is just a flag; the loop runs only what's enabled.
+-- This also fixes the double-spawn bug: toggling a feature off/on
+-- no longer leaves an orphaned loop running alongside the new one.
+local states = {
+    infiniteAmmo = false,
+    instantFire  = false,
+    noSpread     = false,
+    noRecoil     = false,
+}
+
+local _heartbeat = RunService.Heartbeat:Connect(function()
+    if states.infiniteAmmo then
+        applyToStats("Ammo",        999)
+        applyToStats("CurrentAmmo", 999)
+    end
+
+    if states.instantFire then
+        applyToStats("FireRate", 0)
+    end
+
+    if states.noSpread then
+        applyToStats("SprayPattern", ZERO_SPRAY)
+        applyToSubTable("Bloom", ZERO_BLOOM)
+    end
+
+    if states.noRecoil then
+        applyToSubTable("Recoil", ZERO_RECOIL)
+    end
+end)
+
+-- ── Main tab ──────────────────────────────────────────
+main:Label("Weapon Modifications")
+main:Separator("features")
+
+main:Toggle("Infinite Ammo", false, function(v)
+    states.infiniteAmmo = v
+end)
+
+main:Toggle("Instant FireRate", false, function(v)
+    states.instantFire = v
+end)
+
+main:Toggle("No Spread", false, function(v)
+    states.noSpread = v
+end)
+
+main:Toggle("No Recoil", false, function(v)
+    states.noRecoil = v
+end)
+
+-- ── Config tab ────────────────────────────────────────
+cfg:Keybind("Toggle UI", Enum.KeyCode.Insert, function()
+    win:SetVisible(not win._vis)
+end)
