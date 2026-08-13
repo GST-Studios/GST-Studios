@@ -929,14 +929,27 @@ local _Item_mt = {}
 _Item_mt.__index = _Item_mt
 
 function _Item_mt:_destroy()
+    -- Destroy all RR objects stored directly on the item (not in _objs)
+    for k, v in pairs(self) do
+        if type(v) == "table" and v.destroy then
+            pcall(function() v:destroy() end)
+        end
+    end
+    
+    -- Destroy all tracked objects
     local objs = self._objs
     for i=1,#objs do 
         local obj = objs[i]
-        -- Hide and remove the drawing object
-        pcall(function() 
-            obj.Visible = false
-            obj:Remove() 
-        end)
+        -- Handle RoundedRect objects (they have a destroy method)
+        if obj.destroy then
+            pcall(function() obj:destroy() end)
+        else
+            -- Regular drawing objects
+            pcall(function() 
+                obj.Visible = false
+                obj:Remove() 
+            end)
+        end
         -- Also remove from tab's object list
         if self._tab and self._tab._objs then
             for j=#self._tab._objs,1,-1 do
