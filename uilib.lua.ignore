@@ -827,16 +827,18 @@ function _Tab:_reflow()
     local items = self._items
     for i=1,#items do
         local item = items[i]
-        local ih   = item._IH or IH
-        local iy   = sy - self._scrollY
-        item:_repos(ix, iy, iw)
-        local inView = (iy >= top) and (iy + ih <= bot)
-        -- opt: only toggle visibility when it actually changes
-        if inView ~= item._inView then
-            item._inView = inView
-            if self._vis then item:_setVis(inView) end
+        if not item._destroyed then
+            local ih   = item._IH or IH
+            local iy   = sy - self._scrollY
+            item:_repos(ix, iy, iw)
+            local inView = (iy >= top) and (iy + ih <= bot)
+            -- opt: only toggle visibility when it actually changes
+            if inView ~= item._inView then
+                item._inView = inView
+                if self._vis then item:_setVis(inView) end
+            end
+            sy = sy + ih + PAD
         end
-        sy = sy + ih + PAD
     end
 end
 
@@ -857,14 +859,18 @@ function _Tab:_click(inp)
     local items = self._items
     for i=1,#items do
         local item = items[i]
-        if item._isDropdown and item._open then
-            if item._click then item:_click(inp) end
-            return
+        if not item._destroyed then
+            if item._isDropdown and item._open then
+                if item._click then item:_click(inp) end
+                return
+            end
         end
     end
     for i=1,#items do
         local item = items[i]
-        if item._inView and item._click then item:_click(inp) end
+        if not item._destroyed and item._inView and item._click then 
+            item:_click(inp) 
+        end
     end
 end
 
@@ -872,7 +878,9 @@ function _Tab:_mouseUp(inp)
     local items = self._items
     for i=1,#items do
         local item = items[i]
-        if item._mouseUp then item:_mouseUp(inp) end
+        if not item._destroyed and item._mouseUp then 
+            item:_mouseUp(inp) 
+        end
     end
 end
 
@@ -929,6 +937,9 @@ local _Item_mt = {}
 _Item_mt.__index = _Item_mt
 
 function _Item_mt:_destroy()
+    -- Mark as destroyed to prevent further operations
+    self._destroyed = true
+    
     -- Destroy all RR objects stored directly on the item (not in _objs)
     for k, v in pairs(self) do
         if type(v) == "table" and v.destroy then
