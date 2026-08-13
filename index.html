@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GST Studios — Roblox Scripts Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #1e2235;
+      --border: #2e3147;
+      --accent: #7c6af7;
+      --accent-glow: rgba(124, 106, 247, 0.35);
+      --accent2: #5eead4;
+      --accent3: #f472b6;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --code-bg: #12151f;
+      --tag: #2d3748;
+      --warn: #fbbf24;
+      --green: #86efac;
+      --red: #f87171;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    [data-theme="cyberpunk"] {
+      --bg: #0d0914;
+      --surface: #161224;
+      --surface2: #211a36;
+      --border: #3c2a60;
+      --accent: #ff2a85;
+      --accent-glow: rgba(255, 42, 133, 0.4);
+      --accent2: #00f0ff;
+      --accent3: #ffe600;
+      --text: #f0f3fe;
+      --muted: #9a8bb8;
+      --code-bg: #0a0710;
+    }
+
+    [data-theme="matrix"] {
+      --bg: #050b06;
+      --surface: #0a160c;
+      --surface2: #102414;
+      --border: #1a3c21;
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.4);
+      --accent2: #34d399;
+      --accent3: #a7f3d0;
+      --text: #d1fae5;
+      --muted: #5eead4;
+      --code-bg: #020503;
+    }
+
+    [data-theme="dracula"] {
+      --bg: #282a36;
+      --surface: #343746;
+      --surface2: #44475a;
+      --border: #6272a4;
+      --accent: #bd93f9;
+      --accent-glow: rgba(189, 147, 249, 0.4);
+      --accent2: #8be9fd;
+      --accent3: #ff79c6;
+      --text: #f8f8f2;
+      --muted: #6272a4;
+      --code-bg: #1e1f29;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+      display: flex;
+      min-height: 100vh;
+      font-size: 15px;
+    }
+
+    /* ── TOP BAR ── */
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 54px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 18px; z-index: 200;
+    }
+    #topbar .logo {
+      color: var(--accent); font-weight: 700; font-size: 1.05rem;
+      white-space: nowrap; letter-spacing: 0.02em; display: flex; align-items: center; gap: 8px;
+    }
+    #search-wrap { flex: 1; max-width: 420px; position: relative; }
+    #search {
+      width: 100%; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); padding: 7px 32px 7px 36px; font-size: 0.88rem; outline: none;
+      transition: border-color .15s;
+    }
+    #search:focus { border-color: var(--accent); }
+    #search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: .45; pointer-events: none; }
+    .kbd-shortcut {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted); font-size: 0.68rem; font-family: monospace;
+      padding: 2px 5px; border-radius: 4px; pointer-events: none;
+    }
+    #search-count { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+    #filter-wrap { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-btn {
+      background: var(--tag); border: 1px solid var(--border); color: var(--muted);
+      border-radius: 6px; padding: 3px 10px; font-size: 0.75rem; cursor: pointer;
+      transition: all .15s; white-space: nowrap;
+    }
+    .filter-btn:hover, .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .theme-selector {
+      display: flex; gap: 4px; background: var(--code-bg); padding: 3px;
+      border: 1px solid var(--border); border-radius: 8px; margin-left: auto;
+    }
+    .theme-dot {
+      width: 16px; height: 16px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: transform 0.2s;
+    }
+    .theme-dot:hover { transform: scale(1.15); }
+    .theme-dot.active { border-color: #fff; }
+    .theme-dot.default { background: linear-gradient(135deg, #0f1117, #7c6af7); }
+    .theme-dot.cyberpunk { background: linear-gradient(135deg, #0d0914, #ff2a85); }
+    .theme-dot.matrix { background: linear-gradient(135deg, #050b06, #10b981); }
+    .theme-dot.dracula { background: linear-gradient(135deg, #282a36, #bd93f9); }
+
+    .menu-toggle {
+      display: none; background: none; border: none; color: var(--text);
+      font-size: 1.2rem; cursor: pointer; padding: 4px;
+    }
+
+    /* ── SIDEBAR ── */
+    nav {
+      width: 240px; min-width: 200px; background: var(--surface);
+      border-right: 1px solid var(--border); height: calc(100vh - 54px);
+      position: fixed; top: 54px; left: 0; bottom: 0;
+      overflow-y: auto; padding: 0.8rem 0; z-index: 100;
+    }
+    nav::-webkit-scrollbar { width: 4px; }
+    nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    nav .nav-section {
+      color: var(--accent); font-size: 0.68rem; text-transform: uppercase;
+      letter-spacing: .1em; padding: .8rem 1rem .2rem; font-weight: 600;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    nav a {
+      display: block; padding: .3rem 1rem; color: var(--muted);
+      text-decoration: none; font-size: 0.8rem; transition: color .12s, background .12s;
+      border-radius: 4px; margin: 0 .4rem; word-break: break-all; font-family: 'Fira Code', monospace;
+    }
+    nav a:hover { color: var(--accent2); background: var(--surface2); }
+    nav a.active { color: var(--accent2); background: var(--surface2); font-weight: 600; border-left: 2px solid var(--accent2); }
+
+    /* ── MAIN ── */
+    main { margin-left: 240px; margin-top: 54px; padding: 2.2rem 2.5rem 5rem 2.5rem; max-width: 980px; width: 100%; }
+    .page-title { font-size: 1.9rem; color: var(--accent); margin-bottom: .3rem; font-weight: 700; }
+    .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: .92rem; }
+
+    /* ── HERO CARD ── */
+    .hero-card {
+      background: linear-gradient(135deg, #1a1d27 0%, #12102a 100%);
+      border: 1px solid var(--accent); border-radius: 12px; padding: 1.6rem 1.8rem; margin-bottom: 2rem;
+    }
+    .hero-card h2 { font-size: 1.3rem; color: var(--accent); margin-bottom: .3rem; }
+    .hero-card p { color: var(--muted); font-size: .9rem; line-height: 1.7; margin-bottom: .8rem; }
+    .pill-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .6rem; }
+    .pill {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: .25rem .65rem; font-family: 'Fira Code', monospace; font-size: .78rem; color: #a5b4fc;
+      text-decoration: none; cursor: pointer; transition: all 0.15s;
+    }
+    .pill:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    /* ── SECTION HEADERS ── */
+    .section-header {
+      margin: 2.5rem 0 1rem; padding-bottom: .5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-header h2 { font-size: 1.1rem; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
+    .section-count { background: var(--tag); color: var(--muted); font-size: .7rem; padding: 2px 7px; border-radius: 10px; }
+
+    /* ── SCRIPT CARDS ── */
+    .fn-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; margin-bottom: 1.4rem; padding: 1.2rem 1.4rem;
+      scroll-margin-top: 64px; transition: border-color .15s;
+    }
+    .fn-card:hover { border-color: #3e4260; }
+    .fn-card.hidden { display: none; }
+    .fn-card .fn-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: .4rem; }
+    .fn-card h3 { font-size: 1rem; color: var(--accent2); font-family: 'Fira Code', monospace; word-break: break-all; }
+    .tag {
+      display: inline-block; background: var(--tag); color: var(--accent2); border-radius: 4px;
+      font-size: .7rem; padding: .12rem .45rem; font-family: 'Fira Code', monospace;
+    }
+    .tag.no-ext { color: var(--warn); background: rgba(251, 191, 36, 0.15); }
+    .tag.lua { color: var(--accent2); background: rgba(94, 234, 212, 0.15); }
+
+    .fn-card p { color: var(--muted); font-size: .88rem; line-height: 1.65; margin-bottom: .7rem; }
+    .fn-card .example-label { font-size: .7rem; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .25rem; }
+    .pre-wrap { position: relative; }
+    pre {
+      background: var(--code-bg); border-radius: 6px; padding: .8rem 0.9rem;
+      font-family: 'Fira Code', monospace; font-size: .8rem;
+      color: #e2e8f0; overflow-x: auto; border: 1px solid var(--border); line-height: 1.55;
+    }
+    .copy-btn {
+      position: absolute; top: 7px; right: 7px;
+      background: var(--accent); color: #fff; border: none; border-radius: 5px;
+      padding: .2rem .6rem; font-size: .7rem; cursor: pointer; opacity: .8; transition: opacity .15s;
+    }
+    .copy-btn:hover { opacity: 1; }
+    .copy-btn.copied { background: #22c55e; }
+
+    .card-actions {
+      display: flex; gap: 8px; margin-top: 0.8rem;
+    }
+    .link-btn {
+      color: var(--accent2); font-size: 0.78rem; text-decoration: none;
+      font-family: 'Fira Code', monospace; display: inline-flex; align-items: center; gap: 4px;
+      transition: color 0.15s;
+    }
+    .link-btn:hover { color: #fff; text-decoration: underline; }
+
+    .no-results { text-align: center; color: var(--muted); padding: 4rem 0; font-size: .95rem; }
+    .no-results span { font-size: 2.5rem; display: block; margin-bottom: .5rem; }
+
+    /* TOAST */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px; background: var(--surface2);
+      border: 1px solid var(--accent); color: var(--text); padding: 10px 16px;
+      border-radius: 8px; font-size: 0.85rem; z-index: 1000; opacity: 0; transform: translateY(20px);
+      transition: all 0.3s ease; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    @media (max-width: 900px) {
+      .menu-toggle { display: block; }
+      nav { transform: translateX(-100%); width: 260px; }
+      nav.open { transform: translateX(0); }
+      main { margin-left: 0; padding: 1.5rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <button class="menu-toggle" id="menuToggle">☰</button>
+    <div class="logo">⚡ GST-Studios Hub</div>
+    <div id="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="search" type="text" placeholder="Search scripts..." autocomplete="off" spellcheck="false"/>
+      <span class="kbd-shortcut">/</span>
+    </div>
+    <span id="search-count"></span>
+    <div id="filter-wrap">
+      <a href="http://gst-studios.github.io/exploitdocs.html" target="_blank" class="filter-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; background:var(--accent); color:#fff; border-color:var(--accent);">Exploit Docs ↗</a>
+    </div>
+    <div class="theme-selector">
+      <div class="theme-dot default active" data-theme="default" title="Default Dark"></div>
+      <div class="theme-dot cyberpunk" data-theme="cyberpunk" title="Cyberpunk"></div>
+      <div class="theme-dot matrix" data-theme="matrix" title="Matrix"></div>
+      <div class="theme-dot dracula" data-theme="dracula" title="Dracula"></div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <nav id="sidebar">
+    <div class="nav-section">Repository Files</div>
+    <div id="sidebar-links">
+      <!-- Dynamic sidebar links rendered via JS -->
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main id="main-content">
+    <h1 class="page-title">GST-Studios Script Loader Hub</h1>
+    <p class="subtitle">Direct Roblox <code>loadstring(game:HttpGet(...))()</code> script executor links sourced live from <a href="https://github.com/GST-Studios/GST-Studios/tree/main" target="_blank" style="color:var(--accent2);">GST-Studios/GST-Studios (main branch)</a>.</p>
+
+    <div class="hero-card">
+      <h2>🚀 Quick Executor Loadstring</h2>
+      <p>Select any script below to copy its ready-to-run <code>loadstring</code> URL for Synapse X, Solara, Wave, Potassium, UNC, or mobile executors.</p>
+      <div class="pill-grid" id="quick-pills">
+        <!-- Quick pills auto filled -->
+      </div>
+    </div>
+
+    <div id="no-results" class="no-results" style="display:none;">
+      <span>🔍</span>No scripts match your search query.
+    </div>
+
+    <div class="section-header">
+      <h2>Scripts & Files</h2>
+      <span class="section-count" id="total-count">0</span>
+    </div>
+
+    <div id="cards-container">
+      <!-- Script cards auto-rendered here -->
+    </div>
+  </main>
+
+  <div id="toast">Copied loadstring to clipboard!</div>
+
+  <script>
+    // Fallback file list from GST-Studios/GST-Studios (main branch)
+    const fallbackFiles = [
+      { path: "bhop.lua", type: "lua" },
+      { path: "remove some cooldowns and glitch games.lua", type: "lua" },
+      { path: "a desrt game", type: "no-ext" },
+      { path: "return {     TextRand = ToLookalike,     Chat = chat }", type: "no-ext" }
+    ];
+
+    const repoOwner = "GST-Studios";
+    const repoName = "GST-Studios";
+    const branch = "main";
+    const rawBaseUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/`;
+
+    const searchInput = document.getElementById('search');
+    const searchCount = document.getElementById('search-count');
+    const totalCountEl = document.getElementById('total-count');
+    const cardsContainer = document.getElementById('cards-container');
+    const sidebarLinksEl = document.getElementById('sidebar-links');
+    const quickPillsEl = document.getElementById('quick-pills');
+    const noResults = document.getElementById('no-results');
+    const toast = document.getElementById('toast');
+    const filterBtns = document.querySelectorAll('.filter-btn');
+
+    let currentCategory = 'all';
+    let loadedFiles = [];
+
+    function makeCardId(path) {
+      return 'file-' + path.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+    }
+
+    function encodePath(path) {
+      return path.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    }
+
+    function renderFiles(files) {
+      loadedFiles = files;
+      cardsContainer.innerHTML = '';
+      sidebarLinksEl.innerHTML = '';
+      quickPillsEl.innerHTML = '';
+
+      totalCountEl.textContent = files.length;
+
+      files.forEach(file => {
+        const id = makeCardId(file.path);
+        const encoded = encodePath(file.path);
+        const rawUrl = rawBaseUrl + encoded;
+        const githubUrl = `https://github.com/${repoOwner}/${repoName}/blob/${branch}/${encoded}`;
+        const loadstringCode = `loadstring(game:HttpGet("${rawUrl}"))()`;
+        const isLua = file.path.endsWith('.lua');
+        const cat = isLua ? 'lua' : 'no-ext';
+        const tagText = isLua ? '.lua Script' : 'No Extension';
+
+        // Sidebar link
+        const a = document.createElement('a');
+        a.href = '#' + id;
+        a.textContent = file.path;
+        sidebarLinksEl.appendChild(a);
+
+        // Quick pill
+        const pill = document.createElement('a');
+        pill.className = 'pill';
+        pill.href = '#' + id;
+        pill.textContent = file.path;
+        quickPillsEl.appendChild(pill);
+
+        // Function Card
+        const card = document.createElement('div');
+        card.className = 'fn-card';
+        card.id = id;
+        card.dataset.category = cat;
+        card.dataset.path = file.path.toLowerCase();
+
+        card.innerHTML = `
+          <div class="fn-header">
+            <h3>${escapeHtml(file.path)}</h3>
+            <span class="tag ${cat}">${tagText}</span>
+          </div>
+          <p>Executable Roblox client script URL hosted on <code>GST-Studios/${repoName}</code> repo.</p>
+          <div class="example-label">Loadstring Command</div>
+          <div class="pre-wrap">
+            <button class="copy-btn" onclick="copyText('${escapeQuotes(loadstringCode)}')">Copy Loadstring</button>
+            <pre><code>${escapeHtml(loadstringCode)}</code></pre>
+          </div>
+          <div class="card-actions">
+            <a class="link-btn" href="${rawUrl}" target="_blank">🔗 Raw File</a>
+            <a class="link-btn" href="${githubUrl}" target="_blank">📦 View on GitHub</a>
+          </div>
+        `;
+
+        cardsContainer.appendChild(card);
+      });
+
+      updateFilter();
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function escapeQuotes(str) {
+      return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+    }
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("Copied loadstring to clipboard!");
+      }).catch(() => {
+        // Fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast("Copied loadstring to clipboard!");
+      });
+    }
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    function updateFilter() {
+      const q = searchInput.value.toLowerCase().trim();
+      const cards = cardsContainer.querySelectorAll('.fn-card');
+      let visible = 0;
+
+      cards.forEach(card => {
+        const cat = card.dataset.category;
+        const text = card.innerText.toLowerCase();
+        const matchesCat = (currentCategory === 'all' || cat === currentCategory);
+        const matchesSearch = !q || text.includes(q);
+
+        if (matchesCat && matchesSearch) {
+          card.classList.remove('hidden');
+          visible++;
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+
+      searchCount.textContent = `${visible} file${visible === 1 ? '' : 's'}`;
+      noResults.style.display = visible === 0 ? 'block' : 'none';
+    }
+
+    // Fetch live from GitHub tree API
+    async function fetchRepoTree() {
+      try {
+        const res = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/git/trees/${branch}?recursive=1`);
+        if (!res.ok) throw new Error('API Rate Limit or Error');
+        const data = await res.json();
+        
+        const files = (data.tree || [])
+          .filter(item => item.type === 'blob')
+          .filter(item => {
+            const name = item.path;
+            if (name.startsWith('.')) return false;
+            if (name.toLowerCase() === 'readme.md') return false;
+            // .lua OR no extension
+            const hasExt = name.includes('.') && !name.endsWith('/');
+            const isLua = name.endsWith('.lua');
+            return isLua || !hasExt;
+          })
+          .map(item => ({
+            path: item.path,
+            type: item.path.endsWith('.lua') ? 'lua' : 'no-ext'
+          }));
+
+        if (files.length > 0) {
+          renderFiles(files);
+          return;
+        }
+      } catch (err) {
+        console.warn('Using fallback file list:', err);
+      }
+      renderFiles(fallbackFiles);
+    }
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCategory = btn.dataset.cat;
+        updateFilter();
+      });
+    });
+
+    searchInput.addEventListener('input', updateFilter);
+
+    window.addEventListener('keydown', e => {
+      if (e.key === '/' && document.activeElement !== searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+      }
+    });
+
+    // Theme selector
+    document.querySelectorAll('.theme-dot').forEach(dot => {
+      dot.addEventListener('click', () => {
+        document.querySelectorAll('.theme-dot').forEach(d => d.classList.remove('active'));
+        dot.classList.add('active');
+        const theme = dot.dataset.theme;
+        if (theme === 'default') document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', theme);
+      });
+    });
+
+    // Mobile nav toggle
+    document.getElementById('menuToggle').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+    });
+
+    // Init
+    fetchRepoTree();
+  </script>
+</body>
+</html>
