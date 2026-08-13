@@ -393,7 +393,7 @@ function Win:_connect()
                 return
             end
             self:_click(inp)
-        elseif not gpe and inp.UserInputType == Enum.UserInputType.Keyboard then
+        elseif inp.UserInputType == Enum.UserInputType.Keyboard then
             -- opt #4: single-pass keybind check — check listening flag and fire
             -- in the SAME loop instead of iterating _kbinds twice
             local anyListening = false
@@ -1411,7 +1411,7 @@ function _Tab:Textbox(label, placeholder, cb)
         if nf then
             if kconn then kconn:Disconnect() end
             kconn = UIS.InputBegan:Connect(newcclosure(function(ki,gp)
-                if gp or not self._focus then return end
+                if not self._focus then return end
                 if ki.UserInputType~=Enum.UserInputType.Keyboard then return end
                 if ki.KeyCode==Enum.KeyCode.Return then
                     self._focus=false; self._cur.Transparency=0
@@ -1545,7 +1545,7 @@ function _Tab:Keybind(label, defaultKey, cb)
             refresh(self)
             if lconn then lconn:Disconnect() end
             lconn = UIS.InputBegan:Connect(newcclosure(function(ki,gp)
-                if gp or ki.UserInputType~=Enum.UserInputType.Keyboard then return end
+                if ki.UserInputType~=Enum.UserInputType.Keyboard then return end
                 self._key=ki.KeyCode
                 self._listening=false
                 self._kbEntry.key=ki.KeyCode
