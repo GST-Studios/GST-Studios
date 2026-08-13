@@ -463,10 +463,12 @@
       noResults.style.display = visible === 0 ? 'block' : 'none';
     }
 
+    let lastKnownFilePaths = [];
+
     // Fetch live from GitHub tree API
     async function fetchRepoTree() {
       try {
-        const res = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/git/trees/${branch}?recursive=1`);
+        const res = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/git/trees/${branch}?recursive=1&t=${Date.now()}`);
         if (!res.ok) throw new Error('API Rate Limit or Error');
         const data = await res.json();
         
@@ -487,6 +489,14 @@
           }));
 
         if (files.length > 0) {
+          const currentPaths = files.map(f => f.path);
+          if (lastKnownFilePaths.length > 0) {
+            const newFiles = currentPaths.filter(p => !lastKnownFilePaths.includes(p));
+            if (newFiles.length > 0) {
+              showToast(`✨ ${newFiles.length} new script${newFiles.length === 1 ? '' : 's'} added!`);
+            }
+          }
+          lastKnownFilePaths = currentPaths;
           renderFiles(files);
           return;
         }
@@ -530,8 +540,12 @@
       document.getElementById('sidebar').classList.toggle('open');
     });
 
-    // Init
+    // Render immediately (0ms instant UI load)
+    renderFiles(fallbackFiles);
+    // Initial fetch
     fetchRepoTree();
+    // Auto-poll GitHub every 10 seconds for real-time updates
+    setInterval(fetchRepoTree, 10000);
   </script>
 </body>
 </html>
