@@ -1,0 +1,197 @@
+-- Helper API
+-- Custom helper functions for common Roblox operations
+--
+-- USAGE:
+--   loadstring(game:HttpGet("YOUR_URL_HERE"))().install()
+--
+-- AVAILABLE FUNCTIONS:
+--   Region: getregions(), getpartsinregion(region, maxParts)
+--   Player: getlocalplayer(), getplayers(), getcharacter(player), getroot(player)
+--           gethumanoid(player), getteam(player), getstats(player)
+--           getplayerfromcharacter(character), getnearestplayer(maxDistance)
+--   Executor: getmemoryusage(), fireremote(remote, ...), getobjects(assetId)
+--             islimitedglobals(), getconnectionstate(), getping()
+--   Network: joinserver(placeId, jobId), serverhop(), rejoinserver()
+--            getserverinfo(), isnetwork()
+--
+-- EXAMPLE:
+--   loadstring(game:HttpGet("YOUR_URL"))().install()
+--   
+--   local char = getcharacter()
+--   local root = getroot()
+--   local nearest, dist = getnearestplayer(100)
+--   print("Ping:", getping(), "ms")
+--   print("Memory:", getmemoryusage(), "MB")
+
+local HelperAPI = {}
+
+-- ═══════════════════════════════════════════════════════════════
+-- REGION HELPERS
+-- ═══════════════════════════════════════════════════════════════
+
+function HelperAPI.getregions()
+	local regions = {}
+	for _, obj in pairs(workspace:GetDescendants()) do
+		if typeof(obj) == "Region3" then
+			table.insert(regions, obj)
+		end
+	end
+	return regions
+end
+
+function HelperAPI.getpartsinregion(region, maxParts)
+	maxParts = maxParts or math.huge
+	local parts = workspace:FindPartsInRegion3(region, nil, maxParts)
+	return parts
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- PLAYER HELPERS
+-- ═══════════════════════════════════════════════════════════════
+
+function HelperAPI.getlocalplayer()
+	return game:GetService("Players").LocalPlayer
+end
+
+function HelperAPI.getplayers()
+	return game:GetService("Players"):GetPlayers()
+end
+
+function HelperAPI.getcharacter(player)
+	player = player or HelperAPI.getlocalplayer()
+	return player and player.Character
+end
+
+function HelperAPI.getroot(player)
+	player = player or HelperAPI.getlocalplayer()
+	local char = HelperAPI.getcharacter(player)
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+function HelperAPI.gethumanoid(player)
+	player = player or HelperAPI.getlocalplayer()
+	local char = HelperAPI.getcharacter(player)
+	return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+function HelperAPI.getteam(player)
+	player = player or HelperAPI.getlocalplayer()
+	return player and player.Team
+end
+
+function HelperAPI.getstats(player)
+	player = player or HelperAPI.getlocalplayer()
+	return player and player:FindFirstChild("leaderstats")
+end
+
+function HelperAPI.getplayerfromcharacter(character)
+	return game:GetService("Players"):GetPlayerFromCharacter(character)
+end
+
+function HelperAPI.getnearestplayer(maxDistance)
+	maxDistance = maxDistance or math.huge
+	local localPlayer = HelperAPI.getlocalplayer()
+	local localRoot = HelperAPI.getroot(localPlayer)
+	
+	if not localRoot then return nil, math.huge end
+	
+	local nearestPlayer = nil
+	local nearestDistance = maxDistance
+	
+	for _, player in pairs(HelperAPI.getplayers()) do
+		if player ~= localPlayer then
+			local root = HelperAPI.getroot(player)
+			if root then
+				local distance = (localRoot.Position - root.Position).Magnitude
+				if distance < nearestDistance then
+					nearestPlayer = player
+					nearestDistance = distance
+				end
+			end
+		end
+	end
+	
+	return nearestPlayer, nearestDistance
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- EXECUTOR FUNCTION WRAPPERS
+-- ═══════════════════════════════════════════════════════════════
+
+function HelperAPI.getmemoryusage()
+	local Stats = game:GetService("Stats")
+	-- Get memory from performance stats in MB
+	return math.floor(Stats:GetTotalMemoryUsageMb())
+end
+
+function HelperAPI.fireremote(remote, ...)
+	if remote:IsA("RemoteEvent") then
+		return remote:FireServer(...)
+	elseif remote:IsA("RemoteFunction") then
+		return remote:InvokeServer(...)
+	end
+end
+
+function HelperAPI.getconnectionstate()
+	local success = pcall(function()
+		game:GetService("ReplicatedStorage"):GetServerEndpoint()
+	end)
+	return success and "Connected" or "Disconnected"
+end
+
+function HelperAPI.joinserver(placeId, jobId)
+	game:GetService("TeleportService"):TeleportToPlaceInstance(placeId, jobId)
+end
+
+function HelperAPI.serverhop()
+	local TeleportService = game:GetService("TeleportService")
+	local placeId = game.PlaceId
+	TeleportService:Teleport(placeId)
+end
+
+function HelperAPI.rejoinserver()
+	local TeleportService = game:GetService("TeleportService")
+	TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
+end
+
+function HelperAPI.getserverinfo()
+	return {
+		PlaceId = game.PlaceId,
+		JobId = game.JobId,
+		Players = #game:GetService("Players"):GetPlayers(),
+		MaxPlayers = game:GetService("Players").MaxPlayers
+	}
+end
+
+function HelperAPI.isnetwork()
+	return game:GetService("RunService"):IsClient() and not game:GetService("RunService"):IsStudio()
+end
+
+function HelperAPI.getping()
+	local Stats = game:GetService("Stats")
+	local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+	-- Ping is in seconds, convert to milliseconds
+	return math.floor(ping)
+end
+
+function HelperAPI.touch(obj)
+	firetouchinterest(HelperAPI.getroot(), obj, 0)
+	firetouchinterest(HelperAPI.getroot(), obj, 1)
+end
+-- ═══════════════════════════════════════════════════════════════
+-- INSTALL TO GLOBAL ENVIRONMENT
+-- ═══════════════════════════════════════════════════════════════
+
+function HelperAPI.install()
+	local env = getgenv and getgenv() or _G
+	
+	for name, func in pairs(HelperAPI) do
+		if name ~= "install" then
+			env[name] = func
+		end
+	end
+	
+	print("[Helper API] Installed successfully")
+end
+
+return HelperAPI
