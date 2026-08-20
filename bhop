@@ -636,12 +636,11 @@ end
 	function magnitude2D(x, z)
 		return math.sqrt(x * x + z * z)
 	end
-	function onInput(inputObj, gameProcessedEvent)
+	function onInput(inputObj)
 		local inputState
-		UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
+		UserInputService.InputBegan:Connect(function(input)
 	
-	if input.KeyCode == Enum.KeyCode.RightAlt then
+	if input.KeyCode == Enum.KeyCode.LeftAlt then
 		bhopEnabled = not bhopEnabled
 		
 		if humanoid then
