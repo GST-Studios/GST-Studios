@@ -64,16 +64,6 @@ anims.Idle:Play()
 anims.Walk:Play()
 ```
 
-### load from roblox folder
-
-```lua
-AnimLoader:LoadAnimationFolder(folder, waitTime, priority)
-```
-
-- `folder` - roblox folder with keyframe sequences
-- `waitTime` - (optional) wait seconds, default 7
-- `priority` - (optional) sets priority for all animations
-
 ```lua
 local anims = AnimLoader:LoadAnimationFolder(
 	game.ReplicatedStorage.Animations,
