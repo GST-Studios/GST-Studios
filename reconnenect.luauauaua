@@ -1,1 +1,52 @@
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local CoreGui = game:GetService("CoreGui")
 
+local player = Players.LocalPlayer
+local reconnecting = false
+
+local scripts = [[
+loadstring(game:HttpGet("https://raw.githubusercontent.com/GST-Studios/GST-Studios/refs/heads/main/reconnenect.luauauaua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/MICKYcyber/Animation-Dump/refs/heads/main/PermaDeath.luau"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/evxncodes/mainroblox/refs/heads/main/anti-afk"))()
+]]
+
+local function queueScripts()
+	if queue_on_teleport then
+		queue_on_teleport(scripts)
+	elseif syn and syn.queue_on_teleport then
+		queue_on_teleport(scripts)
+	end
+end
+
+local function reconnect()
+	if reconnecting then
+		return
+	end
+
+	reconnecting = true
+	queueScripts()
+
+	TeleportService:TeleportToPlaceInstance(
+		game.PlaceId,
+		game.JobId,
+		player
+	)
+end
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/MICKYcyber/Animation-Dump/refs/heads/main/PermaDeath.luau"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/evxncodes/mainroblox/refs/heads/main/anti-afk"))()
+
+while task.wait(1) do
+	for _, obj in ipairs(CoreGui:GetDescendants()) do
+		if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+			local text = obj.Text
+
+			if text:find("Please check your internet connection and try again.", 1, true)
+				or text:find("(Error Code: 277)", 1, true) then
+				reconnect()
+				break
+			end
+		end
+	end
+end
