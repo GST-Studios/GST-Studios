@@ -29,7 +29,6 @@ local function reconnect()
 
 	TeleportService:TeleportToPlaceInstance(
 		game.PlaceId,
-		game.JobId,
 		player
 	)
 end
