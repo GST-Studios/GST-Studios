@@ -1,4 +1,4 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GST-Studios/GST-Studios/refs/heads/main/reconnenect.luauauaua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/evxncodes/mainroblox/refs/heads/main/anti-afk"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/MICKYcyber/Animation-Dump/refs/heads/main/PermaDeath.luau"))()
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
