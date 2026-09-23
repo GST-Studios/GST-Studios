@@ -171,8 +171,8 @@ local Input = {} do
 	local PAN_GAMEPAD_SPEED  = Vector2.new(1, 1)*(pi/8)
 	local FOV_WHEEL_SPEED    = 1.0
 	local FOV_GAMEPAD_SPEED  = 0.25
-	local NAV_ADJ_SPEED      = 0.25
-	local NAV_SHIFT_MUL      = 0.1
+	local NAV_ADJ_SPEED      = 0.75
+	local NAV_SHIFT_MUL      = 0.75
 
 	local navSpeed = 1
 
