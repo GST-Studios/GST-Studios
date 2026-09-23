@@ -34,15 +34,7 @@ local function reconnect()
 end
 
 GuiService.ErrorMessageChanged:Connect(function()
-	if reconnecting then
-		return
-	end
-
-	local errorcode = GuiService:GetErrorCode()
-	local message = GuiService.ErrorMessage
-
-	if errorcode == 277
-		or message:find("Please check your internet connection and try again.", 1, true) then
+	if GuiService:GetErrorCode() ~= 0 then
 		reconnect()
 	end
 end)
