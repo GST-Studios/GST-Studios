@@ -56,7 +56,7 @@ end
 local FREECAM_ENABLED_ATTRIBUTE_NAME = "FreecamEnabled"
 local TOGGLE_INPUT_PRIORITY = Enum.ContextActionPriority.Low.Value
 local INPUT_PRIORITY = Enum.ContextActionPriority.High.Value
-local FREECAM_MACRO_KB = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
+local FREECAM_MACRO_KB = {Enum.KeyCode.X}
 
 local NAV_GAIN = Vector3.new(1, 1, 1)*64
 local PAN_GAIN = Vector2.new(0.75, 1)*8
@@ -166,13 +166,13 @@ local Input = {} do
 	}
 
 	local NAV_GAMEPAD_SPEED  = Vector3.new(1, 1, 1)
-	local NAV_KEYBOARD_SPEED = Vector3.new(1, 1, 1)
-	local PAN_MOUSE_SPEED    = Vector2.new(1, 1)*(pi/16)
+	local NAV_KEYBOARD_SPEED = Vector3.new(0.5, 0.5, 0.5)
+	local PAN_MOUSE_SPEED    = Vector2.new(1, 1)*(pi/6144)
 	local PAN_GAMEPAD_SPEED  = Vector2.new(1, 1)*(pi/8)
 	local FOV_WHEEL_SPEED    = 1.0
 	local FOV_GAMEPAD_SPEED  = 0.25
-	local NAV_ADJ_SPEED      = 0.75
-	local NAV_SHIFT_MUL      = 0.25
+	local NAV_ADJ_SPEED      = 0.25
+	local NAV_SHIFT_MUL      = 0.1
 
 	local navSpeed = 1
 
@@ -290,7 +290,9 @@ local function StepFreecam(dt)
 	local pan = Input.Pan(dt)
 	local fov = Input.Fov(dt)
 
-	cameraFov = clamp(cameraFov + fov*FOV_GAIN*dt, 1, 120)
+	local zoomFactor = sqrt(tan(rad(70/2))/tan(rad(cameraFov/2)))
+
+	cameraFov = clamp(cameraFov + fov*FOV_GAIN*(dt/zoomFactor), 1, 120)
 
 	cameraRot = cameraRot + pan*PAN_GAIN
 	cameraRot = Vector2.new(
@@ -335,7 +337,6 @@ local PlayerState = {} do
 	local screenGuis = {}
 	local coreGuis = {
 		Backpack = true,
-		Chat = true,
 		Health = true,
 		PlayerList = true,
 	}
@@ -368,7 +369,7 @@ local PlayerState = {} do
 		Camera.FieldOfView = 70
 
 		cameraType = Camera.CameraType
-		Camera.CameraType = Enum.CameraType.Scriptable
+		Camera.CameraType = Enum.CameraType.Custom
 
 		cameraCFrame = Camera.CFrame
 		cameraFocus = Camera.Focus
@@ -417,12 +418,14 @@ local PlayerState = {} do
 		mouseBehavior = nil
 	end
 end
-
+local con
 local function StartFreecam()
 	if FFlagUserShowGuiHideToggles then
 		script:SetAttribute(FREECAM_ENABLED_ATTRIBUTE_NAME, true)
 	end
-
+	con = RunService.Heartbeat:Connect(function()
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+	end)
 	local cameraCFrame = Camera.CFrame
 	cameraRot = Vector2.new(cameraCFrame:toEulerAnglesYXZ())
 	cameraPos = cameraCFrame.p
@@ -437,7 +440,7 @@ local function StopFreecam()
 	if FFlagUserShowGuiHideToggles then
 		script:SetAttribute(FREECAM_ENABLED_ATTRIBUTE_NAME, false)
 	end
-
+	con:Disconnect()
 	Input.StopCapture()
 	RunService:UnbindFromRenderStep("Freecam")
 	PlayerState.Pop()
