@@ -290,18 +290,14 @@ local function StepFreecam(dt)
 	local pan = Input.Pan(dt)
 	local fov = Input.Fov(dt)
 
-	local zoomFactor = sqrt(tan(rad(70/2))/tan(rad(cameraFov/2)))
+	cameraFov = clamp(cameraFov + fov*FOV_GAIN*dt, 1, 120)
 
-	cameraFov = clamp(cameraFov + fov*FOV_GAIN*(dt/zoomFactor), 1, 120)
-
-	-- direct mouse movement, no smoothing
 	cameraRot = cameraRot + pan*PAN_GAIN
 	cameraRot = Vector2.new(
 		clamp(cameraRot.x, -PITCH_LIMIT, PITCH_LIMIT),
 		cameraRot.y%(2*pi)
 	)
 
-	-- direct movement, no acceleration/deceleration
 	local cameraCFrame =
 		CFrame.new(cameraPos) *
 		CFrame.fromOrientation(cameraRot.x, cameraRot.y, 0)
@@ -316,7 +312,6 @@ local function StepFreecam(dt)
 	Camera.Focus = cameraCFrame
 	Camera.FieldOfView = cameraFov
 end
-
 
 local function CheckMouseLockAvailability()
 	local devAllowsMouseLock = Players.LocalPlayer.DevEnableMouseLock
