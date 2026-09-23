@@ -381,7 +381,7 @@ local PlayerState = {} do
 		else
 			mouseBehavior = UserInputService.MouseBehavior
 		end
-		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 	end
 
 	-- Restore state
