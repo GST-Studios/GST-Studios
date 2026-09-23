@@ -166,7 +166,7 @@ local Input = {} do
 	}
 
 	local NAV_GAMEPAD_SPEED  = Vector3.new(1, 1, 1)
-	local NAV_KEYBOARD_SPEED = Vector3.new(0.5, 0.5, 0.5)
+	local NAV_KEYBOARD_SPEED = Vector3.new(0.3, 0.3, 0.3)
 	local PAN_MOUSE_SPEED    = Vector2.new(1, 1)*(pi/6144)
 	local PAN_GAMEPAD_SPEED  = Vector2.new(1, 1)*(pi/8)
 	local FOV_WHEEL_SPEED    = 1.0
