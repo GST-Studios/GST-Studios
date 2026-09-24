@@ -1,56 +1,10 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/evxncodes/mainroblox/refs/heads/main/anti-afk"))()
-local players = game:GetService("Players")
-local teleportservice = game:GetService("TeleportService")
-local httpservice = game:GetService("HttpService")
-local guiservice = cloneref(game:GetService("GuiService"))
-local rs = loadstring(game:HttpGet("https://raw.githubusercontent.com/MICKYcyber/Animation-Dump/refs/heads/main/easy%20runservice.luau"))()
-local player = players.LocalPlayer
-local reconnecting = false
-local placeid = tostring(game.PlaceId)
-local posfile = "lastpos.json"
-local function savepos()
-local char = player.Character
-local root = char and char:FindFirstChild("HumanoidRootPart")
-if not root then return end
-local pos = root.CFrame
-local x,y,z = pos:ToOrientation()
-local data = {}
-if isfile(posfile) then
-local ok,decoded = pcall(function() return httpservice:JSONDecode(readfile(posfile)) end)
-if ok and type(decoded) == "table" then data = decoded end
-end
-data[placeid] = {position={pos.X,pos.Y,pos.Z},rotation={x,y,z}}
-writefile(posfile,httpservice:JSONEncode(data))
-end
-local function loadpos()
-if not isfile(posfile) then return end
-local ok,data = pcall(function() return httpservice:JSONDecode(readfile(posfile)) end)
-if not ok or type(data) ~= "table" or not data[placeid] then return end
-local saved = data[placeid]
-local position = saved.position
-local rotation = saved.rotation
-if not position or not rotation then return end
-local char = player.Character or player.CharacterAdded:Wait()
-local root = char:WaitForChild("HumanoidRootPart")
-root.CFrame = CFrame.new(position[1],position[2],position[3]) * CFrame.Angles(rotation[1],rotation[2],rotation[3])
-end
-rs.add(function()
-savepos()
+local GUI = game:GetService("GuiService")
+local TPS = game:GetService("TeleportService")
+local P = game:GetService("Players")
+
+local Client = P["LocalPlayer"]
+
+GUI["ErrorMessageChanged"]:Connect(function()
+    queue_on_teleport([[loadstring(game:HttpGet("https://raw.githubusercontent.com/GST-Studios/GST-Studios/refs/heads/main/reconnenect.luauauaua"))()]])
+    TPS:TeleportToPlaceInstance(game["PlaceId"], game["JobId"], Client)
 end)
-local function reconnect()
-if reconnecting then return end
-reconnecting = true
-queueonteleport([[
-loadstring(game:HttpGet("https://raw.githubusercontent.com/GST-Studios/GST-Studios/refs/heads/main/reconnenect.luauauaua"))()
-]])
-teleportservice:Teleport(game.PlaceId)
-end
-player.CharacterAdded:Connect(function()
-task.wait(1)
-loadpos()
-end)
-guiservice.ErrorMessageChanged:Connect(function()
-print("error fired")
-reconnect()
-end)
-loadpos()
