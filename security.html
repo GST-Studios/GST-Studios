@@ -80,7 +80,7 @@
       <input id="query" placeholder="Search anything… (e.g. `type:signal`, `type:event`, `tag:hidden`, `class:Player`, `name:Kill`)" autocomplete="off">
       <input id="classFilter" placeholder="Class filter (e.g. Player)" autocomplete="off">
       <select id="kind">
-        <option value="allNoSecurity">Everything (no security)</option>
+        <option value="securityOnly">Everything (security restricted only)</option>
         <option value="all">All member types (including security)</option>
         <option value="Property">Properties</option>
         <option value="Event">Events / signals</option>
@@ -187,8 +187,9 @@ function hasTag(m, tag) {
 }
 
 function isSecurityRestricted(m) {
-  const s = m.security.toLowerCase();
-  return !!s && !s.includes('none') && !s.includes('security') ? false : (s && !s.includes('none'));
+  const s = String(m.security || '').trim();
+  if (!s) return false;
+  return !/\bNone\b/i.test(s) && /\b(?:LocalUserSecurity|RobloxScriptSecurity|RobloxSecurity|PluginSecurity|RobloxNotAccessibleSecurity|RobloxRestrictedUserSecurity)\b/i.test(s);
 }
 
 function isInternalish(m) {
@@ -271,8 +272,8 @@ function applyFilters() {
     if (f.superclass && !f.superclass.some(v => m.superclass.toLowerCase().includes(v))) return false;
 
     if (cf && !m.className.toLowerCase().includes(cf)) return false;
-    if (kind === 'allNoSecurity' && isSecurityRestricted(m)) return false;
-    if (kind !== 'all' && kind !== 'allNoSecurity' && !typeMatches(m, kind)) return false;
+    if (kind === 'securityOnly' && !isSecurityRestricted(m)) return false;
+    if (kind !== 'all' && kind !== 'securityOnly' && !typeMatches(m, kind)) return false;
     if (onlyPlayer && m.className !== 'Player') return false;
     if (onlyHidden && !hasTag(m,'Hidden')) return false;
     if (onlyNotRep && !hasTag(m,'NotReplicated')) return false;
