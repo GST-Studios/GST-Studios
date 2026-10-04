@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roblox Internal Member Finder</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: #0b1020;
+    color: #eaf0ff;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 24px; }
+  h1 { margin: 0 0 6px; font-size: 28px; }
+  .sub { color: #9ba8c7; margin-bottom: 20px; }
+  .panel {
+    background: #121a2e; border: 1px solid #24304c; border-radius: 14px; padding: 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.25); margin-bottom: 16px;
+  }
+  .grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  input, select, button {
+    width: 100%; border: 1px solid #30405f; background: #0d1425; color: #eef3ff;
+    border-radius: 10px; padding: 11px 12px; font: inherit;
+  }
+  button { cursor: pointer; background: #1a2947; }
+  button:hover { background: #22375d; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .row > * { flex: 1 1 180px; }
+  .checks { display:flex; gap:14px; flex-wrap:wrap; margin-top:12px; }
+  .checks label { display:flex; align-items:center; gap:7px; color:#c8d2ea; font-size:14px; }
+  .checks input { width:auto; }
+  .status { margin-top: 10px; color:#93a2c5; font-size:13px; }
+  .stats { display:flex; gap:10px; flex-wrap:wrap; margin-top: 12px; }
+  .stat { padding:9px 12px; border-radius:10px; background:#0d1425; border:1px solid #263552; }
+  .stat b { color:#fff; }
+  #results { display:grid; grid-template-columns: repeat(auto-fill,minmax(360px,1fr)); gap:12px; }
+  .card { background:#11192b; border:1px solid #263552; border-radius:14px; padding:14px; }
+  .head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+  .member { font-size:18px; font-weight:700; overflow-wrap:anywhere; }
+  .class { color:#7db2ff; font-size:13px; margin-top:3px; }
+  .badges { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+  .badge { font-size:11px; border-radius:999px; padding:4px 7px; background:#202e4a; color:#cbd8f5; border:1px solid #314466; }
+  .badge.hot { background:#332341; border-color:#704f85; color:#f0d4ff; }
+  .meta { font-size:13px; color:#abb7d0; line-height:1.6; }
+  .meta code { color:#f2f5ff; }
+  details { margin-top:10px; }
+  summary { cursor:pointer; color:#a8c7ff; }
+  pre { max-height:310px; overflow:auto; padding:10px; background:#090e19; border:1px solid #202d46; border-radius:8px; font-size:12px; }
+  .empty { padding:30px; text-align:center; color:#8998b8; grid-column:1/-1; }
+  .tiny { font-size:12px; color:#8795b2; }
+  a { color:#8db8ff; }
+  .source { margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Roblox Internal Member Finder</h1>
+  <div class="sub">Search Roblox API metadata for hidden, non-replicated, non-scriptable, security-restricted, and event/signal members.</div>
+
+  <div class="panel">
+    <div class="row">
+      <button id="loadFull">Load Full API Dump</button>
+      <button id="loadNormal">Load API Dump</button>
+      <input id="fileInput" type="file" accept=".json,application/json" title="Load a local API-Dump.json or Full-API-Dump.json">
+    </div>
+    <div class="status" id="status">No dump loaded. Load one from GitHub or choose a local JSON dump.</div>
+    <div class="source tiny">
+      Default sources:
+      <a href="https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/Full-API-Dump.json" target="_blank" rel="noreferrer">Full-API-Dump.json</a> ·
+      <a href="https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json" target="_blank" rel="noreferrer">API-Dump.json</a>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="grid">
+      <input id="query" placeholder="Search anything… (e.g. `type:signal`, `type:event`, `tag:hidden`, `class:Player`, `name:Kill`)" autocomplete="off">
+      <input id="classFilter" placeholder="Class filter (e.g. Player)" autocomplete="off">
+      <select id="kind">
+        <option value="allNoSecurity">Everything (no security)</option>
+        <option value="all">All member types (including security)</option>
+        <option value="Property">Properties</option>
+        <option value="Event">Events / signals</option>
+        <option value="Function">Functions</option>
+        <option value="Callback">Callbacks</option>
+      </select>
+    </div>
+    <div class="checks">
+      <label><input id="hidden" type="checkbox"> Hidden</label>
+      <label><input id="notrep" type="checkbox"> NotReplicated</label>
+      <label><input id="notscript" type="checkbox"> NotScriptable</label>
+      <label><input id="security" type="checkbox"> Security-restricted</label>
+      <label><input id="internal" type="checkbox"> Internal-ish only</label>
+      <label><input id="onlyPlayer" type="checkbox"> Player class only</label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <select id="securityLevel">
+        <option value="">Any security</option>
+        <option value="None">None</option>
+        <option value="RobloxScriptSecurity">RobloxScriptSecurity</option>
+        <option value="RobloxSecurity">RobloxSecurity</option>
+        <option value="PluginSecurity">PluginSecurity</option>
+        <option value="LocalUserSecurity">LocalUserSecurity</option>
+        <option value="RobloxNotAccessibleSecurity">RobloxNotAccessibleSecurity</option>
+      </select>
+      <select id="sort">
+        <option value="class">Class → member</option>
+        <option value="member">Member → class</option>
+        <option value="type">Member type</option>
+      </select>
+      <input id="limit" type="number" min="1" max="10000" value="500" title="Maximum results to render">
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="tiny" style="margin-top:10px">
+      Search syntax: <code>type:signal</code> / <code>type:event</code> / <code>type:property</code> / <code>type:function</code> / <code>type:callback</code> ·
+      <code>tag:hidden</code> · <code>tag:notreplicated</code> · <code>tag:notscriptable</code> ·
+      <code>class:Player</code> · <code>name:Kill</code> · <code>security:RobloxScriptSecurity</code>.
+      Plain words still search all member metadata.
+    </div>
+  </div>
+
+  <div id="results"><div class="empty">Load a dump to begin.</div></div>
+</div>
+
+<script>
+const URLS = {
+  full: 'https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/Full-API-Dump.json',
+  normal: 'https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json'
+};
+
+let classes = [];
+let members = [];
+let dumpName = '';
+
+const $ = id => document.getElementById(id);
+
+function arr(v) {
+  if (Array.isArray(v)) return v;
+  if (v == null) return [];
+  return [v];
+}
+
+function securityText(sec) {
+  if (sec == null) return '';
+  if (typeof sec === 'string') return sec;
+  if (typeof sec === 'object') {
+    return Object.entries(sec).map(([k,v]) => `${k}:${v}`).join(' ');
+  }
+  return String(sec);
+}
+
+function valuesText(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  try { return JSON.stringify(v); } catch { return String(v); }
+}
+
+function normalizeDump(json) {
+  const sourceClasses = Array.isArray(json?.Classes) ? json.Classes : [];
+  classes = sourceClasses;
+  members = [];
+  for (const cls of sourceClasses) {
+    for (const m of (Array.isArray(cls.Members) ? cls.Members : [])) {
+      const tags = arr(m.Tags).map(x => String(x));
+      const sec = securityText(m.Security);
+      members.push({
+        className: cls.Name || '?',
+        superclass: cls.Superclass || '',
+        name: m.Name || '?',
+        type: m.MemberType || '',
+        tags,
+        security: sec,
+        valueType: m.ValueType || null,
+        category: m.Category || '',
+        serialization: m.Serialization || null,
+        raw: m
+      });
+    }
+  }
+}
+
+function hasTag(m, tag) {
+  return m.tags.some(t => t.toLowerCase() === tag.toLowerCase());
+}
+
+function isSecurityRestricted(m) {
+  const s = m.security.toLowerCase();
+  return !!s && !s.includes('none') && !s.includes('security') ? false : (s && !s.includes('none'));
+}
+
+function isInternalish(m) {
+  return hasTag(m,'Hidden') || hasTag(m,'NotScriptable') || hasTag(m,'NotReplicated') ||
+         /robloxscriptsecurity|robloxsecurity|robloxnotaccessiblesecurity|localusersecurity|plugins?security/i.test(m.security);
+}
+
+function matchesSecurity(m, wanted) {
+  if (!wanted) return true;
+  if (wanted === 'None') return !m.security || /(?:^|[\s:])None(?:$|\s)/i.test(m.security);
+  return m.security.toLowerCase().includes(wanted.toLowerCase());
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function badge(text, hot=false) {
+  return `<span class="badge ${hot ? 'hot' : ''}">${escapeHtml(text)}</span>`;
+}
+
+function typeMatches(m, wanted) {
+  const w = wanted.toLowerCase();
+  const t = m.type.toLowerCase();
+  if (w === 'signal' || w === 'signals' || w === 'event' || w === 'events') return t === 'event';
+  if (w === 'property' || w === 'properties') return t === 'property';
+  if (w === 'function' || w === 'functions' || w === 'method' || w === 'methods') return t === 'function';
+  if (w === 'callback' || w === 'callbacks') return t === 'callback';
+  return t === w;
+}
+
+function parseSearch(q) {
+  const field = {};
+  const free = [];
+  const parts = q.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+  for (const raw of parts) {
+    const token = raw.replace(/^"|"$/g, '');
+    const idx = token.indexOf(':');
+    if (idx > 0) {
+      const k = token.slice(0, idx).toLowerCase();
+      const v = token.slice(idx + 1).replace(/^"|"$/g, '');
+      const known = ['type','kind','tag','class','name','security','member','full','category','superclass'];
+      if (known.includes(k) && v) {
+        (field[k] ||= []).push(v.toLowerCase());
+        continue;
+      }
+    }
+    free.push(token.toLowerCase());
+  }
+  return { field, free };
+}
+
+function applyFilters() {
+  const q = $('query').value.trim().toLowerCase();
+  const parsed = parseSearch(q);
+  const cf = $('classFilter').value.trim().toLowerCase();
+  const kind = $('kind').value;
+  const wantedSecurity = $('securityLevel').value;
+  const onlyPlayer = $('onlyPlayer').checked;
+  const onlyHidden = $('hidden').checked;
+  const onlyNotRep = $('notrep').checked;
+  const onlyNotScript = $('notscript').checked;
+  const onlySecurity = $('security').checked;
+  const onlyInternal = $('internal').checked;
+
+  let out = members.filter(m => {
+    const hay = `${m.className} ${m.name} ${m.className}.${m.name} ${m.type} ${m.security} ${m.tags.join(' ')} ${m.category} ${valuesText(m.valueType)} ${valuesText(m.serialization)}`.toLowerCase();
+    if (parsed.free.length && !parsed.free.every(term => hay.includes(term))) return false;
+
+    const f = parsed.field;
+    if (f.type && !f.type.every(v => typeMatches(m, v))) return false;
+    if (f.kind && !f.kind.every(v => typeMatches(m, v))) return false;
+    if (f.class && !f.class.some(v => m.className.toLowerCase().includes(v))) return false;
+    if (f.name && !f.name.some(v => m.name.toLowerCase().includes(v))) return false;
+    if (f.member && !f.member.some(v => `${m.className}.${m.name}`.toLowerCase().includes(v))) return false;
+    if (f.full && !f.full.some(v => `${m.className}.${m.name}`.toLowerCase().includes(v))) return false;
+    if (f.tag && !f.tag.every(v => m.tags.some(t => t.toLowerCase() === v))) return false;
+    if (f.security && !f.security.every(v => m.security.toLowerCase().includes(v))) return false;
+    if (f.category && !f.category.some(v => m.category.toLowerCase().includes(v))) return false;
+    if (f.superclass && !f.superclass.some(v => m.superclass.toLowerCase().includes(v))) return false;
+
+    if (cf && !m.className.toLowerCase().includes(cf)) return false;
+    if (kind === 'allNoSecurity' && isSecurityRestricted(m)) return false;
+    if (kind !== 'all' && kind !== 'allNoSecurity' && !typeMatches(m, kind)) return false;
+    if (onlyPlayer && m.className !== 'Player') return false;
+    if (onlyHidden && !hasTag(m,'Hidden')) return false;
+    if (onlyNotRep && !hasTag(m,'NotReplicated')) return false;
+    if (onlyNotScript && !hasTag(m,'NotScriptable')) return false;
+    if (onlySecurity && !isSecurityRestricted(m)) return false;
+    if (onlyInternal && !isInternalish(m)) return false;
+    if (!matchesSecurity(m, wantedSecurity)) return false;
+    return true;
+  });
+
+  const sort = $('sort').value;
+  out.sort((a,b) => {
+    if (sort === 'member') return a.name.localeCompare(b.name) || a.className.localeCompare(b.className);
+    if (sort === 'type') return a.type.localeCompare(b.type) || a.className.localeCompare(b.className) || a.name.localeCompare(b.name);
+    return a.className.localeCompare(b.className) || a.name.localeCompare(b.name);
+  });
+
+  const lim = Math.max(1, Math.min(10000, Number($('limit').value) || 500));
+  const shown = out.slice(0, lim);
+
+  $('stats').innerHTML = [
+    `<div class="stat">Classes <b>${classes.length.toLocaleString()}</b></div>`,
+    `<div class="stat">Members <b>${members.length.toLocaleString()}</b></div>`,
+    `<div class="stat">Matches <b>${out.length.toLocaleString()}</b></div>`,
+    `<div class="stat">Showing <b>${shown.length.toLocaleString()}</b></div>`
+  ].join('');
+
+  if (!shown.length) {
+    $('results').innerHTML = '<div class="empty">No members match the current filters.</div>';
+    return;
+  }
+
+  $('results').innerHTML = shown.map(m => {
+    const b = [];
+    if (hasTag(m,'Hidden')) b.push(badge('Hidden', true));
+    if (hasTag(m,'NotReplicated')) b.push(badge('NotReplicated', true));
+    if (hasTag(m,'NotScriptable')) b.push(badge('NotScriptable', true));
+    if (m.type === 'Event') b.push(badge('EVENT / SIGNAL'));
+    if (m.type === 'Callback') b.push(badge('CALLBACK'));
+    if (m.type === 'Function') b.push(badge('FUNCTION'));
+    if (m.security) b.push(badge(m.security, true));
+
+    let value = '';
+    if (m.valueType) value += `<div><b>ValueType:</b> <code>${escapeHtml(valuesText(m.valueType))}</code></div>`;
+    if (m.category) value += `<div><b>Category:</b> <code>${escapeHtml(m.category)}</code></div>`;
+    if (m.superclass) value += `<div><b>Superclass:</b> <code>${escapeHtml(m.superclass)}</code></div>`;
+    if (m.serialization) value += `<div><b>Serialization:</b> <code>${escapeHtml(valuesText(m.serialization))}</code></div>`;
+
+    return `<div class="card">
+      <div class="head">
+        <div><div class="member">${escapeHtml(m.name)}</div><div class="class">${escapeHtml(m.className)}.${escapeHtml(m.name)}</div></div>
+        ${badge(m.type || 'Member')}
+      </div>
+      <div class="badges">${b.join('')}</div>
+      <div class="meta">${value || '<div>No extra metadata shown.</div>'}</div>
+      <details><summary>Raw member metadata</summary><pre>${escapeHtml(JSON.stringify(m.raw, null, 2))}</pre></details>
+    </div>`;
+  }).join('');
+}
+
+async function loadUrl(url, label) {
+  $('status').textContent = `Loading ${label}…`;
+  try {
+    const res = await fetch(url, {cache:'no-store'});
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const json = await res.json();
+    normalizeDump(json);
+    dumpName = label;
+    $('status').textContent = `Loaded ${label}: ${classes.length.toLocaleString()} classes, ${members.length.toLocaleString()} members.`;
+    applyFilters();
+  } catch (err) {
+    $('status').textContent = `Could not load ${label}: ${err.message}. Use the local JSON file picker if your browser blocks cross-origin fetches.`;
+  }
+}
+
+$('loadFull').onclick = () => loadUrl(URLS.full, 'Full-API-Dump.json');
+$('loadNormal').onclick = () => loadUrl(URLS.normal, 'API-Dump.json');
+$('fileInput').addEventListener('change', async e => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const json = JSON.parse(await file.text());
+    normalizeDump(json);
+    dumpName = file.name;
+    $('status').textContent = `Loaded local ${file.name}: ${classes.length.toLocaleString()} classes, ${members.length.toLocaleString()} members.`;
+    applyFilters();
+  } catch (err) {
+    $('status').textContent = `Invalid JSON: ${err.message}`;
+  }
+});
+
+for (const id of ['query','classFilter','kind','hidden','notrep','notscript','security','internal','onlyPlayer','securityLevel','sort','limit']) {
+  $(id).addEventListener('input', applyFilters);
+  $(id).addEventListener('change', applyFilters);
+}
+
+// Try the more complete dump immediately.
+loadUrl(URLS.full, 'Full-API-Dump.json');
+</script>
+</body>
+</html>
